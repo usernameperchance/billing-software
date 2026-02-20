@@ -84,7 +84,7 @@ export default function App() {
 
         {items.length === 0 && (
           <p style={{ textAlign: "center", marginTop: 20 }}>
-            no items added yet 😐
+            no items added yet
           </p>
         )}
       </div>
