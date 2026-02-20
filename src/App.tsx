@@ -1,19 +1,28 @@
-import React, { useState } from "react";
+import { useState } from "react";
+
+type Item = {
+  product: string;
+  qty: number;
+  price: number;
+  total: number;
+};
 
 export default function App() {
-  const [product, setProduct] = useState("");
-  const [qty, setQty] = useState(1);
-  const [price, setPrice] = useState("");
-  const [items, setItems] = useState([]);
+  const [product, setProduct] = useState<string>("");
+  const [qty, setQty] = useState<number>(1);
+  const [price, setPrice] = useState<number>(0);
+  const [items, setItems] = useState<Item[]>([]);
 
   const addItem = () => {
     if (!product || !price) return;
     const total = qty * price;
 
-    setItems([...items, { product, qty, price, total }]);
+    const newItem: Item = { product, qty, price, total };
+    setItems([...items, newItem]);
+
     setProduct("");
     setQty(1);
-    setPrice("");
+    setPrice(0);
   };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
@@ -75,14 +84,12 @@ export default function App() {
 
         {items.length === 0 && (
           <p style={{ textAlign: "center", marginTop: 20 }}>
-            no items added yet
+            no items added yet 😐
           </p>
         )}
       </div>
 
-      <div style={styles.totalBox}>
-        grand total: ₹{grandTotal}
-      </div>
+      <div style={styles.totalBox}>grand total: ₹{grandTotal}</div>
 
       <button style={styles.printBtn} onClick={() => window.print()}>
         print bill
@@ -91,7 +98,7 @@ export default function App() {
   );
 }
 
-const styles = {
+const styles: { [key: string]: React.CSSProperties } = {
   container: {
     maxWidth: "900px",
     margin: "40px auto",
