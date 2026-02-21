@@ -35,13 +35,13 @@ export default function App() {
       return;
     }
 
+    setShade(""); // reset shade
+    setPrice(0);  // reset price
+
     fetch(`/api/getShades?item=${encodeURIComponent(item)}`)
       .then((res) => res.json())
       .then((data) => setShades(data.shades || []))
       .catch(console.error);
-
-    setShade(""); // reset shade
-    setPrice(0);  // reset price
   }, [item]);
 
   // fetch price when both item and shade are selected
