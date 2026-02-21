@@ -1,3 +1,4 @@
+// api/getItems.ts
 import { google } from "googleapis";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -14,15 +15,16 @@ const SPREADSHEET_ID = process.env.SHEET_ID!;
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const client = await auth.getClient();
-    const gsapi = google.sheets({ version: "v4", auth: client as any });
+    const gsapi = google.sheets({ version: "v4", auth: client as any});
 
+    // Registry tab items in column B
     const response = await gsapi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: "Registry!B2:B", // assuming registry tab has item names in column A
+      range: "Registry!B2:B",
     });
 
-    const items = response.data.values?.flat() || [];
-    res.status(200).json(items);
+    const items = response.data.values?.flatMap(v => v) || [];
+    res.status(200).json({ items }); // ✅ wrap in { items: [...] }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch items" });
