@@ -87,7 +87,7 @@ await fetch("/api/bill", {
       setItems([]);
     } catch (err) {
       console.error(err);
-      alert("Failed to save bill 💀");
+      alert("Failed to save bills");
     }
   };
 
@@ -135,8 +135,8 @@ await fetch("/api/bill", {
           <thead>
             <tr>
               <th>Item</th>
-              <th>Shade</th>
-              <th>Qty</th>
+              <th>Shade / Variant</th>
+              <th>Quantity</th>
               <th>Price</th>
               <th>Total</th>
             </tr>
@@ -165,14 +165,75 @@ await fetch("/api/bill", {
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
-  container: { maxWidth: 900, margin: "40px auto", fontFamily: "Arial, sans-serif" },
-  title: { textAlign: "center", marginBottom: 20 },
-  card: { background: "#f5f5f5", padding: 15, borderRadius: 10, marginBottom: 20 },
-  row: { display: "flex", gap: 10, flexWrap: "wrap" },
-  smallInput: { flex: 1, padding: 10, fontSize: 16 },
-  button: { padding: "10px 20px", fontSize: 16, cursor: "pointer" },
-  tableCard: { background: "#fff", borderRadius: 10, padding: 15, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" },
-  table: { width: "100%", borderCollapse: "collapse" },
-  totalBox: { marginTop: 20, fontSize: 22, fontWeight: "bold", textAlign: "right" },
-  printBtn: { marginTop: 20, padding: "12px 20px", fontSize: 16, cursor: "pointer", float: "right" },
+  container: {
+    maxWidth: 900,
+    margin: "40px auto",
+    fontFamily: "Montserrat, Arial, sans-serif",
+    background: "#f4f6f8",
+    padding: 20,
+    borderRadius: 14,
+  },
+  title: {
+    textAlign: "center",
+    marginBottom: 25,
+    fontWeight: 600,
+    letterSpacing: 0.5,
+  },
+  card: {
+    background: "#ffffff",
+    padding: 18,
+    borderRadius: 12,
+    marginBottom: 25,
+    boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+  },
+  row: {
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  smallInput: {
+    flex: 1,
+    padding: "12px 14px",
+    fontSize: 15,
+    borderRadius: 8,
+    border: "1px solid #e0e0e0",
+    outline: "none",
+  },
+  button: {
+    padding: "12px 22px",
+    fontSize: 15,
+    borderRadius: 8,
+    border: "none",
+    background: "#111",
+    color: "#fff",
+    cursor: "pointer",
+  },
+  tableCard: {
+    background: "#ffffff",
+    borderRadius: 12,
+    padding: 20,
+    boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: 15,
+  },
+  totalBox: {
+    marginTop: 25,
+    fontSize: 22,
+    fontWeight: 600,
+    textAlign: "right",
+  },
+  printBtn: {
+    marginTop: 20,
+    marginLeft: 10,
+    padding: "12px 22px",
+    fontSize: 15,
+    borderRadius: 8,
+    border: "none",
+    background: "#111",
+    color: "#fff",
+    cursor: "pointer",
+  },
 };
