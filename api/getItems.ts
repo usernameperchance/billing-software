@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const response = await gsapi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: "registry!A2:A", // assuming registry tab has item names in column A
+      range: "Registry!A2:A", // assuming registry tab has item names in column A
     });
 
     const items = response.data.values?.flat() || [];
