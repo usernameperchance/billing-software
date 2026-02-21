@@ -11,13 +11,30 @@ const auth = new google.auth.GoogleAuth({
 
 const SPREADSHEET_ID = process.env.SHEET_ID!;
 
+function getISTDateTime() {
+  const now = new Date();
+  const date = now.toLocaleDateString("en-IN"); // DD/MM/YYYY
+  const time = now.toLocaleTimeString("en-IN", { hour12: false }); // HH:MM:SS
+  return { date, time };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const {billNo, items, date, time} = req.body;
+    const {items, date: clientDate, time: clientTime } = req.body;
     if (!items || !Array.isArray(items)) return res.status(400).json({ error: "Invalid items" });
 
     const client = await auth.getClient();
     const gsapi = google.sheets({ version: "v4", auth: client as any});
+
+ const billSheet = await gsapi.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "Bill!A:A",
+    });
+
+    const lastBillNo = billSheet.data.values?.flat().filter(v => v).map(Number).pop() || 0;
+    const billNo = lastBillNo + 1;
+
+    const { date, time } = getISTDateTime();
 
     // append bill to "bill" tab
     const billValues = items.map((i: any) => [billNo, i.item, i.shade, i.qty, i.price, i.total, date, time]);
@@ -75,7 +92,7 @@ await gsapi.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
           range: `${item}!D${rowIndex + 2}`,
           valueInputOption: "USER_ENTERED",
-          requestBody: { values: [[new Date().toLocaleString("en-IN")]] },
+           requestBody: { values: [[`${date} ${time}`]] },
         });
       }
     }
