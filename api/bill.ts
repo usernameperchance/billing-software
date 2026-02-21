@@ -22,7 +22,7 @@ export default async function handler(req: any, res: any) {
     // 1️⃣ Read registry for Item → Tab mapping
     const registryRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: "registry!A:B", // Item | TabName
+      range: "Registry!A:B", // Item | TabName
     });
     const registryRows = registryRes.data.values || [];
     const itemMap: Record<string, string> = {};
@@ -83,7 +83,7 @@ export default async function handler(req: any, res: any) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: "bill!A:H",
+      range: "Bill!A:H",
       valueInputOption: "USER_ENTERED",
       requestBody: { values: billRows },
     });
