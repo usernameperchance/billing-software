@@ -13,8 +13,8 @@ const SPREADSHEET_ID = process.env.SHEET_ID!;
 
 function getISTDateTime() {
   const now = new Date();
-  const date = now.toLocaleDateString("en-IN"); // DD/MM/YYYY
-  const time = now.toLocaleTimeString("en-IN", { hour12: false }); // HH:MM:SS
+  const date = now.toLocaleDateString("en-IN", {timeZone: "Asia/Kolkata"}); // DD/MM/YYYY
+  const time = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }); // HH:MM:SS
   return { date, time };
 }
 
