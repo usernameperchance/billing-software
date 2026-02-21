@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-type Item = {
-  brand: string;
+type BillItem = {
+  item: string;
   shade: string;
   qty: number;
   price: number;
@@ -9,96 +9,90 @@ type Item = {
 };
 
 export default function App() {
-  const [brand, setBrand] = useState<string>("");
-  const [shade, setShade] = useState<string>("");
-  const [qty, setQty] = useState<number>(1);
-  const [price, setPrice] = useState<number>(0);
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<BillItem[]>([]);
+  const [allItems, setAllItems] = useState<string[]>([]);
+  const [shades, setShades] = useState<string[]>([]);
 
-  // dummy brand/shade list for now, later fetch from registry tab
-  const brands = ["Triosoft", "Cotton Comfy", "Magnus"];
-  const shades = ["Blue", "Red", "Green"];
+  const [item, setItem] = useState("");
+  const [shade, setShade] = useState("");
+  const [qty, setQty] = useState(1);
+  const [price, setPrice] = useState(0);
+
+  // fetch all items from registry on load
+  useEffect(() => {
+    fetch("/api/getItems")
+      .then(res => res.json())
+      .then(data => setAllItems(data.items || []))
+      .catch(console.error);
+  }, []);
+
+  // fetch shades when item is selected
+  useEffect(() => {
+    if (!item) return setShades([]);
+    fetch(`/api/getShades?item=${encodeURIComponent(item)}`)
+      .then(res => res.json())
+      .then(data => setShades(data.shades || []))
+      .catch(console.error);
+    
+    // optionally fetch price if you want auto-fill
+    fetch(`/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
+      .then(res => res.json())
+      .then(data => setPrice(data.price || 0))
+      .catch(() => {});
+  }, [item, shade]);
 
   const addItem = () => {
-    if (!brand || !shade || !price) return;
+    if (!item || !shade) return;
     const total = qty * price;
-
-    const newItem: Item = { brand, shade, qty, price, total };
-    setItems([...items, newItem]);
-
-    setShade("");
-    setQty(1);
-    setPrice(0);
+    setItems([...items, { item, shade, qty, price, total }]);
+    setItem(""); setShade(""); setQty(1); setPrice(0);
   };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
 
   const saveBill = async () => {
     if (items.length === 0) return;
+
+    // IST date/time
+    const offset = 5.5 * 60; // IST
+    const now = new Date();
+    const local = new Date(now.getTime() + offset * 60 * 1000);
+    const date = local.toISOString().split("T")[0];
+    const time = local.toTimeString().split(" ")[0];
+
     try {
       await fetch("/api/bill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(items),
+        body: JSON.stringify({ items, date, time }),
       });
-      alert("Bill saved to sheets ✅");
+      alert("Bill saved");
       setItems([]);
     } catch (err) {
       console.error(err);
-      alert("Failed to save bill 💀");
+      alert("Failed to save bill");
     }
   };
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>billing counter</h1>
+      <h1 style={styles.title}>Billing Counter</h1>
 
       <div style={styles.card}>
         <div style={styles.row}>
-          <select
-            style={styles.smallInput}
-            value={brand}
-            onChange={(e) => setBrand(e.target.value)}
-          >
-            <option value="">select brand</option>
-            {brands.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
+          <select value={item} onChange={e => setItem(e.target.value)} style={styles.smallInput}>
+            <option value="">Select item</option>
+            {allItems.map(i => <option key={i} value={i}>{i}</option>)}
           </select>
 
-          <select
-            style={styles.smallInput}
-            value={shade}
-            onChange={(e) => setShade(e.target.value)}
-          >
-            <option value="">select shade</option>
-            {shades.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
+          <select value={shade} onChange={e => setShade(e.target.value)} style={styles.smallInput}>
+            <option value="">Select shade</option>
+            {shades.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
 
-          <input
-            style={styles.smallInput}
-            type="number"
-            min="1"
-            placeholder="qty"
-            value={qty}
-            onChange={(e) => setQty(Number(e.target.value))}
-          />
-          <input
-            style={styles.smallInput}
-            type="number"
-            placeholder="price"
-            value={price}
-            onChange={(e) => setPrice(Number(e.target.value))}
-          />
-          <button style={styles.button} onClick={addItem}>
-            add
-          </button>
+          <input type="number" min="1" value={qty} onChange={e => setQty(Number(e.target.value))} placeholder="qty" style={styles.smallInput} />
+          <input type="number" value={price} onChange={e => setPrice(Number(e.target.value))} placeholder="price" style={styles.smallInput} />
+          <button style={styles.button} onClick={addItem}>Add</button>
         </div>
       </div>
 
@@ -106,64 +100,45 @@ export default function App() {
         <table style={styles.table}>
           <thead>
             <tr>
-              <th>brand</th>
-              <th>shade</th>
-              <th>qty</th>
-              <th>price</th>
-              <th>total</th>
+              <th>Item</th>
+              <th>Shade</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Total</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item, i) => (
-              <tr key={i}>
-                <td>{item.brand}</td>
-                <td>{item.shade}</td>
-                <td>{item.qty}</td>
-                <td>₹{item.price}</td>
-                <td>₹{item.total}</td>
+            {items.map((i, idx) => (
+              <tr key={idx}>
+                <td>{i.item}</td>
+                <td>{i.shade}</td>
+                <td>{i.qty}</td>
+                <td>₹{i.price}</td>
+                <td>₹{i.total}</td>
               </tr>
             ))}
           </tbody>
         </table>
-
-        {items.length === 0 && (
-          <p style={{ textAlign: "center", marginTop: 20 }}>
-            no items added yet
-          </p>
-        )}
+        {items.length === 0 && <p style={{ textAlign: "center", marginTop: 20 }}>No items added yet</p>}
       </div>
 
-      <div style={styles.totalBox}>grand total: ₹{grandTotal}</div>
+      <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div>
 
-      <button style={styles.printBtn} onClick={() => window.print()}>
-        print bill
-      </button>
-      <button style={styles.printBtn} onClick={saveBill}>
-        save to sheets
-      </button>
+      <button style={styles.printBtn} onClick={() => window.print()}>Print Bill</button>
+      <button style={styles.printBtn} onClick={saveBill}>Save to Sheets</button>
     </div>
   );
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    maxWidth: "900px",
-    margin: "40px auto",
-    fontFamily: "Arial, sans-serif",
-  },
-  title: { textAlign: "center", marginBottom: "20px" },
-  card: { background: "#f5f5f5", padding: "15px", borderRadius: "10px", marginBottom: "20px" },
-  row: { display: "flex", gap: "10px", flexWrap: "wrap" },
-  input: { flex: 2, padding: "10px", fontSize: "16px" },
-  smallInput: { flex: 1, padding: "10px", fontSize: "16px" },
-  button: { padding: "10px 20px", fontSize: "16px", cursor: "pointer" },
-  tableCard: {
-    background: "#fff",
-    borderRadius: "10px",
-    padding: "15px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-  },
+  container: { maxWidth: 900, margin: "40px auto", fontFamily: "Arial, sans-serif" },
+  title: { textAlign: "center", marginBottom: 20 },
+  card: { background: "#f5f5f5", padding: 15, borderRadius: 10, marginBottom: 20 },
+  row: { display: "flex", gap: 10, flexWrap: "wrap" },
+  smallInput: { flex: 1, padding: 10, fontSize: 16 },
+  button: { padding: "10px 20px", fontSize: 16, cursor: "pointer" },
+  tableCard: { background: "#fff", borderRadius: 10, padding: 15, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" },
   table: { width: "100%", borderCollapse: "collapse" },
-  totalBox: { marginTop: "20px", fontSize: "22px", fontWeight: "bold", textAlign: "right" },
-  printBtn: { marginTop: "20px", padding: "12px 20px", fontSize: "16px", cursor: "pointer", float: "right" },
+  totalBox: { marginTop: 20, fontSize: 22, fontWeight: "bold", textAlign: "right" },
+  printBtn: { marginTop: 20, padding: "12px 20px", fontSize: 16, cursor: "pointer", float: "right" },
 };

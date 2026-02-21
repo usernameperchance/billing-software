@@ -1,96 +1,88 @@
 import { google } from "googleapis";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-export default async function handler(req: any, res: any) {
-  if (req.method !== "POST") return res.status(405).send("Method not allowed");
+const auth = new google.auth.GoogleAuth({
+  credentials: {
+    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+  },
+  scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+});
 
+const SPREADSHEET_ID = process.env.SHEET_ID!;
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const items = req.body; // [{ product, shade, qty, price }]
-    if (!Array.isArray(items) || items.length === 0)
-      return res.status(400).json({ message: "No items received" });
+    const { items, date, time } = req.body;
+    if (!items || !Array.isArray(items)) return res.status(400).json({ error: "Invalid items" });
 
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      },
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    const client = await auth.getClient();
+    const gsapi = google.sheets({ version: "v4", auth: client as any});
+
+    // append bill to "bill" tab
+    const billValues = items.map((i: any) => [i.item, i.shade, i.qty, i.price, i.total, date, time]);
+    await gsapi.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "Bill!A:G",
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: billValues },
     });
 
-    const sheets = google.sheets({ version: "v4", auth });
-    const spreadsheetId = process.env.SHEET_ID;
+    // update stock in respective item tabs
+    for (const i of items) {
+      const { item, shade, qty } = i;
 
-    // 1️⃣ Read registry for Item → Tab mapping
-    const registryRes = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: "Registry!A:B", // Item | TabName
-    });
-    const registryRows = registryRes.data.values || [];
-    const itemMap: Record<string, string> = {};
-    registryRows.forEach(([item, tab]) => { if(item && tab) itemMap[item] = tab; });
-
-    // 2️⃣ IST date/time for Last Updated & bill
-    const offset = 5.5 * 60; // IST offset in minutes
-    const now = new Date();
-    const local = new Date(now.getTime() + offset * 60 * 1000);
-    const date = local.toISOString().slice(0, 10);
-    const time = local.toTimeString().slice(0, 8);
-
-    // 3️⃣ Process each item
-    for (const item of items) {
-      const { product, shade, qty, price } = item;
-      const tabName = itemMap[product];
-      if (!tabName) continue; // skip if item not in registry
-
-      // read the tab for that item
-      const tabRes = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `${tabName}!A:E`, // Shade / Variant | Stock Qty | Price | Last Updated | Alerts
+      // fetch current stock
+      const stockRes = await gsapi.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${item}!A2:B`,
       });
-      const tabValues = tabRes.data.values || [];
 
-      const updatedTab = tabValues.map((row) => {
-        if (row[0] === shade) {
-          const currentQty = Number(row[1] || 0);
-          const newQty = currentQty - qty;
-          row[1] = newQty.toString();      // update stock
-          row[3] = date;                    // Last Updated
-          if (newQty < 2) row[4] = "⚠️ low stock"; // alert
+      const rows = stockRes.data.values || [];
+      const rowIndex = rows.findIndex(r => r[0] === shade);
+      if (rowIndex !== -1) {
+        const currentStock = Number(rows[rowIndex][1]);
+        const newStock = currentStock - qty;
+
+        // update stock
+        await gsapi.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${item}!B${rowIndex + 2}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[newStock]] },
+        });
+
+        // update alert if stock < 2
+        if (newStock < 2) {
+          await gsapi.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${item}!E${rowIndex + 2}`,
+            valueInputOption: "USER_ENTERED",
+            requestBody: { values: [["Restock soon ⚠️"]] },
+          });
+        } else {
+          // clear alert if stock ok
+          await gsapi.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${item}!E${rowIndex + 2}`,
+            valueInputOption: "USER_ENTERED",
+            requestBody: { values: [[""]] },
+          });
         }
-        return row;
-      });
 
-      // write back updated tab
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `${tabName}!A:E`,
-        valueInputOption: "USER_ENTERED",
-        requestBody: { values: updatedTab },
-      });
+        // update last updated column
+        await gsapi.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${item}!D${rowIndex + 2}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[new Date().toLocaleString("en-IN")]] },
+        });
+      }
     }
 
-    // 4️⃣ Append bill to `bill` tab
-    const billNo = Math.floor(Math.random() * 1000000);
-    const billRows = items.map((i: any) => [
-      billNo,
-      i.product,
-      i.shade,
-      i.qty,
-      i.price,
-      i.qty * i.price,
-      date,
-      time,
-    ]);
-
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: "Bill!A:H",
-      valueInputOption: "USER_ENTERED",
-      requestBody: { values: billRows },
-    });
-
-    res.status(200).json({ message: "Bill saved and stock updated" });
-  } catch (err: any) {
-    console.error("Google Sheets error:", err.message);
-    res.status(500).json({ message: "Failed to save bill", error: err.message });
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to save bill" });
   }
 }
