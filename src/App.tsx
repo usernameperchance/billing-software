@@ -18,34 +18,52 @@ export default function App() {
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
 
-  // fetch all items from registry on load
+  // fetch all items on mount
   useEffect(() => {
     fetch("/api/getItems")
-      .then(res => res.json())
-      .then(data => setAllItems(data.items || []))
+      .then((res) => res.json())
+      .then((data) => setAllItems(data.items || []))
       .catch(console.error);
   }, []);
 
-  // fetch shades when item is selected
+  // fetch shades when item changes
   useEffect(() => {
-    if (!item) return setShades([]);
+    if (!item) {
+      setShades([]);
+      setShade("");
+      setPrice(0);
+      return;
+    }
+
     fetch(`/api/getShades?item=${encodeURIComponent(item)}`)
-      .then(res => res.json())
-      .then(data => setShades(data.shades || []))
+      .then((res) => res.json())
+      .then((data) => setShades(data.shades || []))
       .catch(console.error);
-    
-    // optionally fetch price if you want auto-fill
+
+    setShade(""); // reset shade
+    setPrice(0);  // reset price
+  }, [item]);
+
+  // fetch price when both item and shade are selected
+  useEffect(() => {
+    if (!item || !shade) return;
+
     fetch(`/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
-      .then(res => res.json())
-      .then(data => setPrice(data.price || 0))
-      .catch(() => {});
+      .then((res) => res.json())
+      .then((data) => setPrice(data.price || 0))
+      .catch(() => setPrice(0));
   }, [item, shade]);
 
   const addItem = () => {
-    if (!item || !shade) return;
+    if (!item || !shade || !price) return;
+
     const total = qty * price;
     setItems([...items, { item, shade, qty, price, total }]);
-    setItem(""); setShade(""); setQty(1); setPrice(0);
+    setItem("");
+    setShade("");
+    setQty(1);
+    setPrice(0);
+    setShades([]);
   };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
@@ -66,11 +84,11 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items, date, time }),
       });
-      alert("Bill saved");
+      alert("Bill saved ✅");
       setItems([]);
     } catch (err) {
       console.error(err);
-      alert("Failed to save bill");
+      alert("Failed to save bill 💀");
     }
   };
 
@@ -80,18 +98,35 @@ export default function App() {
 
       <div style={styles.card}>
         <div style={styles.row}>
-          <select value={item} onChange={e => setItem(e.target.value)} style={styles.smallInput}>
+          <select value={item} onChange={(e) => setItem(e.target.value)} style={styles.smallInput}>
             <option value="">Select item</option>
-            {allItems.map(i => <option key={i} value={i}>{i}</option>)}
+            {allItems.map((i) => (
+              <option key={i} value={i}>{i}</option>
+            ))}
           </select>
 
-          <select value={shade} onChange={e => setShade(e.target.value)} style={styles.smallInput}>
+          <select value={shade} onChange={(e) => setShade(e.target.value)} style={styles.smallInput}>
             <option value="">Select shade</option>
-            {shades.map(s => <option key={s} value={s}>{s}</option>)}
+            {shades.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
           </select>
 
-          <input type="number" min="1" value={qty} onChange={e => setQty(Number(e.target.value))} placeholder="qty" style={styles.smallInput} />
-          <input type="number" value={price} onChange={e => setPrice(Number(e.target.value))} placeholder="price" style={styles.smallInput} />
+          <input
+            type="number"
+            min="1"
+            value={qty}
+            onChange={(e) => setQty(Number(e.target.value))}
+            placeholder="qty"
+            style={styles.smallInput}
+          />
+          <input
+            type="number"
+            value={price}
+            onChange={(e) => setPrice(Number(e.target.value))}
+            placeholder="price"
+            style={styles.smallInput}
+          />
           <button style={styles.button} onClick={addItem}>Add</button>
         </div>
       </div>
