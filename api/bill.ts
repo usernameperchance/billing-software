@@ -13,20 +13,20 @@ const SPREADSHEET_ID = process.env.SHEET_ID!;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const { items, date, time } = req.body;
+    const {billNo, items, date, time} = req.body;
     if (!items || !Array.isArray(items)) return res.status(400).json({ error: "Invalid items" });
 
     const client = await auth.getClient();
     const gsapi = google.sheets({ version: "v4", auth: client as any});
 
     // append bill to "bill" tab
-    const billValues = items.map((i: any) => [i.item, i.shade, i.qty, i.price, i.total, date, time]);
-    await gsapi.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID,
-      range: "Bill!A:G",
-      valueInputOption: "USER_ENTERED",
-      requestBody: { values: billValues },
-    });
+    const billValues = items.map((i: any) => [billNo, i.item, i.shade, i.qty, i.price, i.total, date, time]);
+await gsapi.spreadsheets.values.append({
+  spreadsheetId: SPREADSHEET_ID,
+  range: "Bill!A:H",
+  valueInputOption: "USER_ENTERED",
+  requestBody: { values: billValues },
+});
 
     // update stock in respective item tabs
     for (const i of items) {

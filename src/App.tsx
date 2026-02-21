@@ -72,18 +72,17 @@ export default function App() {
     if (items.length === 0) return;
 
     // IST date/time
-    const offset = 5.5 * 60; // IST
     const now = new Date();
-    const local = new Date(now.getTime() + offset * 60 * 1000);
-    const date = local.toISOString().split("T")[0];
-    const time = local.toTimeString().split(" ")[0];
+const date = now.toLocaleDateString("en-IN"); // DD/MM/YYYY
+const time = now.toLocaleTimeString("en-IN"); // hh:mm:ss AM/PM
 
     try {
-      await fetch("/api/bill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, date, time }),
-      });
+      const billNo = Math.floor(Math.random() * 100000); // or a better generator
+await fetch("/api/bill", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ billNo, items, date, time }),
+});
       alert("Bill saved ✅");
       setItems([]);
     } catch (err) {
