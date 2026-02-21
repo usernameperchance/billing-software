@@ -105,7 +105,7 @@ await fetch("/api/bill", {
           </select>
 
           <select value={shade} onChange={(e) => setShade(e.target.value)} style={styles.smallInput}>
-            <option value="">Select shade</option>
+            <option value="">Select shade/type</option>
             {shades.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
@@ -129,13 +129,14 @@ await fetch("/api/bill", {
           <button style={styles.button} onClick={addItem}>Add</button>
         </div>
       </div>
-
+      
+      <div id = "bill-area">
       <div style={styles.tableCard}>
         <table style={styles.table}>
           <thead>
             <tr>
               <th>Item</th>
-              <th>Shade / Variant</th>
+              <th>Shade/Type</th>
               <th>Quantity</th>
               <th>Price</th>
               <th>Total</th>
@@ -156,7 +157,7 @@ await fetch("/api/bill", {
         {items.length === 0 && <p style={{ textAlign: "center", marginTop: 20 }}>No items added yet</p>}
       </div>
 
-      <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div>
+      <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div></div>
 
       <button style={styles.printBtn} onClick={() => window.print()}>Print Bill</button>
       <button style={styles.printBtn} onClick={saveBill}>Save to Sheets</button>
