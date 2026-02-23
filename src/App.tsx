@@ -120,12 +120,18 @@ export default function App() {
             ))}
           </datalist>
 
-          <select value={shade} onChange={(e) => setShade(e.target.value)} style={styles.smallInput}>
-            <option value="">Select shade/type</option>
-            {shades.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+         <input
+  list="shades-list"
+  value={shade}
+  onChange={(e) => setShade(e.target.value)}
+  placeholder="type shade..."
+  style={styles.smallInput}
+/>
+<datalist id="shades-list">
+  {shades.map((s) => (
+    <option key={s} value={s} />
+  ))}
+</datalist>
 
           <input
             type="number"
