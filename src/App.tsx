@@ -74,11 +74,11 @@ export default function App() {
     if (e.key === "Enter" && shadeSuggestion) {
       setShade(shadeSuggestion);
     }
-  };
 
-  if (qty < 2) {
+     if (qty < 2) {
   window.alert("low stock: less than 2 left. restock soon.");
-}
+  }
+  };
 
   const addItem = () => {
     if (!item || !shade || !price) return;
