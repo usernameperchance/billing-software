@@ -76,6 +76,10 @@ export default function App() {
     }
   };
 
+  if (qty < 2) {
+  window.alert("low stock: less than 2 left. restock soon.");
+}
+
   const addItem = () => {
     if (!item || !shade || !price) return;
 
@@ -244,7 +248,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: "#aaa",
     pointerEvents: "none",
     fontSize: 15,
-    fontFamily: "Arial, sans-serif"  },
+    fontFamily: "Arial"  },
   button: {
     padding: "12px 22px",
     fontSize: 15,
