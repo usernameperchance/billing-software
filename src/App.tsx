@@ -244,7 +244,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: "#aaa",
     pointerEvents: "none",
     fontSize: 15,
-  },
+    fontFamily: "Arial, sans-serif"  },
   button: {
     padding: "12px 22px",
     fontSize: 15,
