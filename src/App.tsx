@@ -18,7 +18,7 @@ export default function App() {
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
 
-  // fetch all items
+  // fetch items
   useEffect(() => {
     fetch("/api/getItems")
       .then((res) => res.json())
@@ -26,9 +26,9 @@ export default function App() {
       .catch(console.error);
   }, []);
 
-  // fetch shades when item changes
+  // fetch shades when item fully matches
   useEffect(() => {
-    if (!item) {
+    if (!item || !allItems.includes(item)) {
       setShades([]);
       setShade("");
       setPrice(0);
@@ -39,24 +39,42 @@ export default function App() {
       .then((res) => res.json())
       .then((data) => setShades(data.shades || []))
       .catch(console.error);
-
-    setShade("");
-    setPrice(0);
   }, [item]);
 
   // fetch price
   useEffect(() => {
     if (!item || !shade) return;
 
-    fetch(
-      `/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(
-        shade
-      )}`
-    )
+    fetch(`/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then((res) => res.json())
       .then((data) => setPrice(data.price || 0))
       .catch(() => setPrice(0));
   }, [item, shade]);
+
+  // autofill suggestions
+  const itemSuggestion =
+    item &&
+    allItems.find((i) =>
+      i.toLowerCase().startsWith(item.toLowerCase())
+    );
+
+  const shadeSuggestion =
+    shade &&
+    shades.find((s) =>
+      s.toLowerCase().startsWith(shade.toLowerCase())
+    );
+
+  const handleItemKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && itemSuggestion) {
+      setItem(itemSuggestion);
+    }
+  };
+
+  const handleShadeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && shadeSuggestion) {
+      setShade(shadeSuggestion);
+    }
+  };
 
   const addItem = () => {
     if (!item || !shade || !price) return;
@@ -91,15 +109,9 @@ export default function App() {
       setShade("");
     } catch (err) {
       console.error(err);
-      alert("save failed 💀");
+      alert("Failed to save bills");
     }
   };
-
-  const itemSuggestion =
-    allItems.find((i) => i.toLowerCase().startsWith(item.toLowerCase())) || "";
-
-  const shadeSuggestion =
-    shades.find((s) => s.toLowerCase().startsWith(shade.toLowerCase())) || "";
 
   return (
     <div style={styles.container}>
@@ -107,19 +119,37 @@ export default function App() {
 
       <div style={styles.card}>
         <div style={styles.row}>
-          <input
-            value={item}
-            onChange={(e) => setItem(e.target.value)}
-            placeholder={itemSuggestion || "type item..."}
-            style={styles.smallInput}
-          />
+          {/* ITEM AUTOFILL */}
+          <div style={styles.autofillWrapper}>
+            <input
+              value={item}
+              onChange={(e) => setItem(e.target.value)}
+              onKeyDown={handleItemKeyDown}
+              placeholder="type item..."
+              style={styles.smallInput}
+            />
+            {itemSuggestion && item !== itemSuggestion && (
+              <span style={styles.suggestion}>
+                {itemSuggestion}
+              </span>
+            )}
+          </div>
 
-          <input
-            value={shade}
-            onChange={(e) => setShade(e.target.value)}
-            placeholder={shadeSuggestion || "type shade..."}
-            style={styles.smallInput}
-          />
+          {/* SHADE AUTOFILL */}
+          <div style={styles.autofillWrapper}>
+            <input
+              value={shade}
+              onChange={(e) => setShade(e.target.value)}
+              onKeyDown={handleShadeKeyDown}
+              placeholder="type shade..."
+              style={styles.smallInput}
+            />
+            {shadeSuggestion && shade !== shadeSuggestion && (
+              <span style={styles.suggestion}>
+                {shadeSuggestion}
+              </span>
+            )}
+          </div>
 
           <input
             type="number"
@@ -136,9 +166,7 @@ export default function App() {
             placeholder="price"
             style={styles.smallInput}
           />
-          <button style={styles.button} onClick={addItem}>
-            Add
-          </button>
+          <button style={styles.button} onClick={addItem}>Add</button>
         </div>
       </div>
 
@@ -166,22 +194,13 @@ export default function App() {
               ))}
             </tbody>
           </table>
-          {items.length === 0 && (
-            <p style={{ textAlign: "center", marginTop: 20 }}>
-              No items added yet
-            </p>
-          )}
         </div>
 
         <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div>
       </div>
 
-      <button style={styles.printBtn} onClick={() => window.print()}>
-        Print Bill
-      </button>
-      <button style={styles.printBtn} onClick={saveBill}>
-        Save to Sheets
-      </button>
+      <button style={styles.printBtn} onClick={() => window.print()}>Print Bill</button>
+      <button style={styles.printBtn} onClick={saveBill}>Save to Sheets</button>
     </div>
   );
 }
@@ -195,12 +214,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: 20,
     borderRadius: 14,
   },
-  title: {
-    textAlign: "center",
-    marginBottom: 25,
-    fontWeight: 600,
-    letterSpacing: 0.5,
-  },
+  title: { textAlign: "center", marginBottom: 25, fontWeight: 600 },
   card: {
     background: "#ffffff",
     padding: 18,
@@ -208,11 +222,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: 25,
     boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
   },
-  row: {
-    display: "flex",
-    gap: 12,
-    flexWrap: "wrap",
-  },
+  row: { display: "flex", gap: 12, flexWrap: "wrap" },
   smallInput: {
     flex: 1,
     padding: "12px 14px",
@@ -220,6 +230,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: 8,
     border: "1px solid #e0e0e0",
     outline: "none",
+    position: "relative",
+    background: "transparent",
+  },
+  autofillWrapper: {
+    position: "relative",
+    flex: 1,
+  },
+  suggestion: {
+    position: "absolute",
+    left: 14,
+    top: 12,
+    color: "#aaa",
+    pointerEvents: "none",
+    fontSize: 15,
   },
   button: {
     padding: "12px 22px",
@@ -236,17 +260,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: 20,
     boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
   },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-    fontSize: 15,
-  },
-  totalBox: {
-    marginTop: 25,
-    fontSize: 22,
-    fontWeight: 600,
-    textAlign: "right",
-  },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 15 },
+  totalBox: { marginTop: 25, fontSize: 22, fontWeight: 600, textAlign: "right" },
   printBtn: {
     marginTop: 20,
     marginLeft: 10,
