@@ -14,6 +14,7 @@ export default function App() {
   const [shades, setShades] = useState<string[]>([]);
 
   const [item, setItem] = useState("");
+  const [lockedItem, setLockedItem] = useState<string | null>(null);
   const [shade, setShade] = useState("");
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
@@ -35,8 +36,8 @@ export default function App() {
       return;
     }
 
-    setShade(""); // reset shade
-    setPrice(0);  // reset price
+    setShade("");
+    setPrice(0);
 
     fetch(`/api/getShades?item=${encodeURIComponent(item)}`)
       .then((res) => res.json())
@@ -57,13 +58,19 @@ export default function App() {
   const addItem = () => {
     if (!item || !shade || !price) return;
 
+    if (lockedItem && item !== lockedItem) {
+      alert("finish billing this item first");
+      return;
+    }
+
     const total = qty * price;
     setItems([...items, { item, shade, qty, price, total }]);
-    setItem("");
+
+    if (!lockedItem) setLockedItem(item);
+
     setShade("");
     setQty(1);
     setPrice(0);
-    setShades([]);
   };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
@@ -71,20 +78,21 @@ export default function App() {
   const saveBill = async () => {
     if (items.length === 0) return;
 
-    // IST date/time
     const now = new Date();
-const date = now.toLocaleDateString("en-IN"); // DD/MM/YYYY
-const time = now.toLocaleTimeString("en-IN"); // hh:mm:ss AM/PM
+    const date = now.toLocaleDateString("en-IN");
+    const time = now.toLocaleTimeString("en-IN");
 
     try {
-      const billNo = Math.floor(Math.random() * 100000); // or a better generator
-await fetch("/api/bill", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ billNo, items, date, time }),
-});
+      const billNo = Math.floor(Math.random() * 100000);
+      await fetch("/api/bill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billNo, items, date, time }),
+      });
       alert("Bill saved ✅");
       setItems([]);
+      setLockedItem(null);
+      setItem("");
     } catch (err) {
       console.error(err);
       alert("Failed to save bills");
@@ -97,12 +105,20 @@ await fetch("/api/bill", {
 
       <div style={styles.card}>
         <div style={styles.row}>
-          <select value={item} onChange={(e) => setItem(e.target.value)} style={styles.smallInput}>
-            <option value="">Select item</option>
+          {/* AUTOFILL INPUT */}
+          <input
+            list="items-list"
+            value={item}
+            disabled={!!lockedItem}
+            onChange={(e) => setItem(e.target.value)}
+            placeholder="type item..."
+            style={styles.smallInput}
+          />
+          <datalist id="items-list">
             {allItems.map((i) => (
-              <option key={i} value={i}>{i}</option>
+              <option key={i} value={i} />
             ))}
-          </select>
+          </datalist>
 
           <select value={shade} onChange={(e) => setShade(e.target.value)} style={styles.smallInput}>
             <option value="">Select shade/type</option>
@@ -129,35 +145,36 @@ await fetch("/api/bill", {
           <button style={styles.button} onClick={addItem}>Add</button>
         </div>
       </div>
-      
-      <div id = "bill-area">
-      <div style={styles.tableCard}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Shade/Type</th>
-              <th>Quantity</th>
-              <th>Price</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((i, idx) => (
-              <tr key={idx}>
-                <td>{i.item}</td>
-                <td>{i.shade}</td>
-                <td>{i.qty}</td>
-                <td>₹{i.price}</td>
-                <td>₹{i.total}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {items.length === 0 && <p style={{ textAlign: "center", marginTop: 20 }}>No items added yet</p>}
-      </div>
 
-      <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div></div>
+      <div id="bill-area">
+        <div style={styles.tableCard}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Shade/Type</th>
+                <th>Quantity</th>
+                <th>Price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((i, idx) => (
+                <tr key={idx}>
+                  <td>{i.item}</td>
+                  <td>{i.shade}</td>
+                  <td>{i.qty}</td>
+                  <td>₹{i.price}</td>
+                  <td>₹{i.total}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {items.length === 0 && <p style={{ textAlign: "center", marginTop: 20 }}>No items added yet</p>}
+        </div>
+
+        <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div>
+      </div>
 
       <button style={styles.printBtn} onClick={() => window.print()}>Print Bill</button>
       <button style={styles.printBtn} onClick={saveBill}>Save to Sheets</button>
