@@ -19,7 +19,6 @@ export default function App() {
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
 
-  // fetch all items on mount
   useEffect(() => {
     fetch("/api/getItems")
       .then((res) => res.json())
@@ -27,7 +26,6 @@ export default function App() {
       .catch(console.error);
   }, []);
 
-  // fetch shades when item changes
   useEffect(() => {
     if (!item) {
       setShades([]);
@@ -45,7 +43,6 @@ export default function App() {
       .catch(console.error);
   }, [item]);
 
-  // fetch price when both item and shade are selected
   useEffect(() => {
     if (!item || !shade) return;
 
@@ -60,6 +57,7 @@ export default function App() {
 
     if (lockedItem && item !== lockedItem) {
       alert("finish billing this item first");
+      setItem(lockedItem);
       return;
     }
 
@@ -105,12 +103,18 @@ export default function App() {
 
       <div style={styles.card}>
         <div style={styles.row}>
-          {/* AUTOFILL INPUT */}
           <input
             list="items-list"
             value={item}
-            disabled={!!lockedItem}
-            onChange={(e) => setItem(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (lockedItem && val !== lockedItem) {
+                alert("finish billing this item first");
+                setItem(lockedItem);
+                return;
+              }
+              setItem(val);
+            }}
             placeholder="type item..."
             style={styles.smallInput}
           />
@@ -120,18 +124,18 @@ export default function App() {
             ))}
           </datalist>
 
-         <input
-  list="shades-list"
-  value={shade}
-  onChange={(e) => setShade(e.target.value)}
-  placeholder="type shade..."
-  style={styles.smallInput}
-/>
-<datalist id="shades-list">
-  {shades.map((s) => (
-    <option key={s} value={s} />
-  ))}
-</datalist>
+          <input
+            list="shades-list"
+            value={shade}
+            onChange={(e) => setShade(e.target.value)}
+            placeholder="type shade..."
+            style={styles.smallInput}
+          />
+          <datalist id="shades-list">
+            {shades.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
 
           <input
             type="number"
