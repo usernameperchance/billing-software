@@ -17,6 +17,7 @@ export default function App() {
   const [shade, setShade] = useState("");
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
+  const [warning, setWarning] = useState(false);
 
   // fetch items
   useEffect(() => {
@@ -41,6 +42,11 @@ export default function App() {
       .catch(console.error);
   }, [item, allItems]);
 
+  // reset warning when item or shade changes
+  useEffect(() => {
+    setWarning(false);
+  }, [item, shade]);
+
   // fetch price + stock
   useEffect(() => {
     if (!item || !shade) return;
@@ -54,14 +60,16 @@ export default function App() {
       .then((data) => {
         setPrice(data.price || 0);
 
-        if ((data.qty !== undefined && data.qty < 2)) {
-          window.alert("Low stock alert: Only " + data.qty + " left for " + shade);
+        const stockQty = Number(data.qty || 0);
+        if (stockQty < 2 && !warning) {
+          window.alert("low stock: less than 2 left. restock soon.");
+          setWarning(true);
         }
       })
       .catch(() => {
         setPrice(0);
       });
-  }, [item, shade]);
+  }, [item, shade, warning]);
 
   // autofill suggestions
   const itemSuggestion =
