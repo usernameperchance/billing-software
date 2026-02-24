@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const rows = response.data.values || [];
-    const row = rows.find(r => r[0] === shade);
+    const row = rows.find(r => r[0]?.toString().trim().toLowerCase() === shade.toString().trim().toLowerCase());
     const price = row && row[2] ? Number(row[2]) : 0;
     const qty = row && row[1] ? Number(row[1]) : 0;
 
