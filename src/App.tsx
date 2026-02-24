@@ -17,7 +17,6 @@ export default function App() {
   const [shade, setShade] = useState("");
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
-  const [stock, setStock] = useState(0);
 
   // fetch items
   useEffect(() => {
@@ -33,7 +32,6 @@ export default function App() {
       setShades([]);
       setShade("");
       setPrice(0);
-      setStock(0);
       return;
     }
 
@@ -55,15 +53,13 @@ export default function App() {
       .then((res) => res.json())
       .then((data) => {
         setPrice(data.price || 0);
-        setStock(data.qty || 0);
 
-        if ((data.qty || 0) < 2) {
-          window.alert("low stock lol, restock this 😭");
+        if ((data.qty !== undefined && data.qty < 2)) {
+          window.alert("Low stock alert: Only " + data.qty + " left for " + shade);
         }
       })
       .catch(() => {
         setPrice(0);
-        setStock(0);
       });
   }, [item, shade]);
 
@@ -126,13 +122,13 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ billNo, items, date, time }),
       });
-      alert("bill saved 👍");
+      alert("Bill saved");
       setItems([]);
       setItem("");
       setShade("");
     } catch (err) {
       console.error(err);
-      alert("failed to save bills");
+      alert("Failed to save bill");
     }
   };
 
