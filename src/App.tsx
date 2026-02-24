@@ -52,6 +52,7 @@ const [warnedKey, setWarnedKey] = useState<string | null>(null);
     if (!item || !shade) return;
 
     const key = `${item}-${shade}`;
+
     fetch(
       `/api/getPrice?item=${encodeURIComponent(
         item
@@ -61,16 +62,16 @@ const [warnedKey, setWarnedKey] = useState<string | null>(null);
       .then((data) => {
         setPrice(data.price || 0);
 
-        const stockQty = Number(data.qty || 0);
+        const stockQty = Number(data.qty ?? -1);
         if (stockQty < 2 && warnedKey !== key) {
-          window.alert("low stock: less than 2 left. restock soon.");
+          window.alert("Low stock: Stock for " + shade + " is below 2. Please restock soon.");
           setWarnedKey(key);
         }
       })
       .catch(() => {
         setPrice(0);
       });
-  }, [item, shade, warnedKey]);
+  }, [item, shade]);
 
   // autofill suggestions
   const itemSuggestion =
