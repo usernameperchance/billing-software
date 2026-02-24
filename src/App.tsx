@@ -63,7 +63,8 @@ const [warnedKey, setWarnedKey] = useState<string | null>(null);
         setPrice(data.price || 0);
 
         const stockQty = Number(data.qty ?? -1);
-        if (stockQty < 2 && warnedKey !== key) {
+        
+        if (stockQty >= 0 && stockQty < 2 && warnedKey !== key) {
           window.alert("Low stock: Stock for " + shade + " is below 2. Please restock soon.");
           setWarnedKey(key);
         }
