@@ -17,6 +17,7 @@ export default function App() {
   const [shade, setShade] = useState("");
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
+  const [stock, setStock] = useState(0);
 
   // fetch items
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function App() {
       setShades([]);
       setShade("");
       setPrice(0);
+      setStock(0);
       return;
     }
 
@@ -39,16 +41,30 @@ export default function App() {
       .then((res) => res.json())
       .then((data) => setShades(data.shades || []))
       .catch(console.error);
-  }, [item]);
+  }, [item, allItems]);
 
-  // fetch price
+  // fetch price + stock
   useEffect(() => {
     if (!item || !shade) return;
 
-    fetch(`/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
+    fetch(
+      `/api/getPrice?item=${encodeURIComponent(
+        item
+      )}&shade=${encodeURIComponent(shade)}`
+    )
       .then((res) => res.json())
-      .then((data) => setPrice(data.price || 0))
-      .catch(() => setPrice(0));
+      .then((data) => {
+        setPrice(data.price || 0);
+        setStock(data.qty || 0);
+
+        if ((data.qty || 0) < 2) {
+          window.alert("low stock lol, restock this 😭");
+        }
+      })
+      .catch(() => {
+        setPrice(0);
+        setStock(0);
+      });
   }, [item, shade]);
 
   // autofill suggestions
@@ -70,14 +86,12 @@ export default function App() {
     }
   };
 
-  const handleShadeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleShadeKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
     if (e.key === "Enter" && shadeSuggestion) {
       setShade(shadeSuggestion);
     }
-
-     if (qty < 2) {
-  window.alert("low stock: less than 2 left. restock soon.");
-  }
   };
 
   const addItem = () => {
@@ -98,7 +112,12 @@ export default function App() {
 
     const now = new Date();
     const date = now.toLocaleDateString("en-IN");
-    const time = now.toLocaleTimeString("en-IN");
+    const time = now.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    });
 
     try {
       const billNo = Math.floor(Math.random() * 100000);
@@ -107,13 +126,13 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ billNo, items, date, time }),
       });
-      alert("Bill saved");
+      alert("bill saved 👍");
       setItems([]);
       setItem("");
       setShade("");
     } catch (err) {
       console.error(err);
-      alert("Failed to save bills");
+      alert("failed to save bills");
     }
   };
 
@@ -133,9 +152,7 @@ export default function App() {
               style={styles.smallInput}
             />
             {itemSuggestion && item !== itemSuggestion && (
-              <span style={styles.suggestion}>
-                {itemSuggestion}
-              </span>
+              <span style={styles.suggestion}>{itemSuggestion}</span>
             )}
           </div>
 
@@ -149,9 +166,7 @@ export default function App() {
               style={styles.smallInput}
             />
             {shadeSuggestion && shade !== shadeSuggestion && (
-              <span style={styles.suggestion}>
-                {shadeSuggestion}
-              </span>
+              <span style={styles.suggestion}>{shadeSuggestion}</span>
             )}
           </div>
 
@@ -170,7 +185,9 @@ export default function App() {
             placeholder="price"
             style={styles.smallInput}
           />
-          <button style={styles.button} onClick={addItem}>Add</button>
+          <button style={styles.button} onClick={addItem}>
+            Add
+          </button>
         </div>
       </div>
 
@@ -203,8 +220,12 @@ export default function App() {
         <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div>
       </div>
 
-      <button style={styles.printBtn} onClick={() => window.print()}>Print Bill</button>
-      <button style={styles.printBtn} onClick={saveBill}>Save to Sheets</button>
+      <button style={styles.printBtn} onClick={() => window.print()}>
+        Print Bill
+      </button>
+      <button style={styles.printBtn} onClick={saveBill}>
+        Save to Sheets
+      </button>
     </div>
   );
 }
@@ -236,6 +257,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     outline: "none",
     position: "relative",
     background: "transparent",
+    fontFamily: "inherit",
   },
   autofillWrapper: {
     position: "relative",
@@ -247,8 +269,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     top: 12,
     color: "#aaa",
     pointerEvents: "none",
-    fontSize: 15,
-    fontFamily: "Arial"  },
+    fontSize: "inherit",
+    fontFamily: "inherit",
+    lineHeight: "inherit",
+    opacity: 0.5,
+  },
   button: {
     padding: "12px 22px",
     fontSize: 15,
@@ -265,7 +290,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
   },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 15 },
-  totalBox: { marginTop: 25, fontSize: 22, fontWeight: 600, textAlign: "right" },
+  totalBox: {
+    marginTop: 25,
+    fontSize: 22,
+    fontWeight: 600,
+    textAlign: "right",
+  },
   printBtn: {
     marginTop: 20,
     marginLeft: 10,
