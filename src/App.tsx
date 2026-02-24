@@ -17,7 +17,7 @@ export default function App() {
   const [shade, setShade] = useState("");
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
-  const [warning, setWarning] = useState(false);
+const [warnedKey, setWarnedKey] = useState<string | null>(null);
 
   // fetch items
   useEffect(() => {
@@ -44,13 +44,14 @@ export default function App() {
 
   // reset warning when item or shade changes
   useEffect(() => {
-    setWarning(false);
+    setWarnedKey(null);
   }, [item, shade]);
 
   // fetch price + stock
   useEffect(() => {
     if (!item || !shade) return;
 
+    const key = `${item}-${shade}`;
     fetch(
       `/api/getPrice?item=${encodeURIComponent(
         item
@@ -61,15 +62,15 @@ export default function App() {
         setPrice(data.price || 0);
 
         const stockQty = Number(data.qty || 0);
-        if (stockQty < 2 && !warning) {
+        if (stockQty < 2 && warnedKey !== key) {
           window.alert("low stock: less than 2 left. restock soon.");
-          setWarning(true);
+          setWarnedKey(key);
         }
       })
       .catch(() => {
         setPrice(0);
       });
-  }, [item, shade, warning]);
+  }, [item, shade, warnedKey]);
 
   // autofill suggestions
   const itemSuggestion =
