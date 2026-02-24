@@ -77,7 +77,8 @@ export default function App() {
     );
 
   const handleItemKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && itemSuggestion) {
+    if ((e.key === "Enter" || e.key === "Tab") && itemSuggestion) {
+      e.preventDefault();
       setItem(itemSuggestion);
     }
   };
@@ -85,7 +86,8 @@ export default function App() {
   const handleShadeKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement>
   ) => {
-    if (e.key === "Enter" && shadeSuggestion) {
+    if ((e.key === "Enter" || e.key === "Tab") && shadeSuggestion) {
+      e.preventDefault();
       setShade(shadeSuggestion);
     }
   };

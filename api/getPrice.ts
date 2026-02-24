@@ -26,9 +26,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const rows = response.data.values || [];
     const row = rows.find(r => r[0] === shade);
-    const price = row ? Number(row[2]) : 0;
+    const price = row && row[2] ? Number(row[2]) : 0;
+    const qty = row && row[1] ? Number(row[1]) : 0;
 
-    res.status(200).json({ price });
+    res.status(200).json({ price, qty });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch price" });
