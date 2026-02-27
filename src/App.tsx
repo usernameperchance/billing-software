@@ -42,11 +42,6 @@ const [warnedKey, setWarnedKey] = useState<string | null>(null);
       .catch(console.error);
   }, [item, allItems]);
 
-  // reset warning when item or shade changes
-  useEffect(() => {
-    setWarnedKey(null);
-  }, [item, shade]);
-
   // fetch price + stock
 useEffect(() => {
   if (!item || !shade) return;
