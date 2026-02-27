@@ -48,31 +48,31 @@ const [warnedKey, setWarnedKey] = useState<string | null>(null);
   }, [item, shade]);
 
   // fetch price + stock
-  useEffect(() => {
-    if (!item || !shade) return;
+useEffect(() => {
+  if (!item || !shade) return;
 
-    const key = `${item}-${shade}`;
+  fetch(
+    `/api/getPrice?item=${encodeURIComponent(
+      item
+    )}&shade=${encodeURIComponent(shade)}`
+  )
+    .then((res) => res.json())
+    .then((data) => {
+      setPrice(data.price || 0);
 
-    fetch(
-      `/api/getPrice?item=${encodeURIComponent(
-        item
-      )}&shade=${encodeURIComponent(shade)}`
-    )
-      .then((res) => res.json())
-      .then((data) => {
-        setPrice(data.price || 0);
+      const stockQty = Number(data.qty ?? -1);
 
-        const stockQty = Number(data.qty ?? -1);
-
-        if (stockQty >= 0 && stockQty < 2 && warnedKey !== key) {
-          window.alert(`Low stock: Stock is below 2. Please restock soon.`);
-          setWarnedKey(key);
-        }
-      })
-      .catch(() => {
-        setPrice(0);
-      });
-  }, [item, shade]);
+      if (stockQty >= 0 && stockQty < 2 && warnedKey !== `${item}-${shade}`) {
+        window.alert(
+          "low stock for this shade. check the stock sheet for details."
+        );
+        setWarnedKey(`${item}-${shade}`);
+      }
+    })
+    .catch(() => {
+      setPrice(0);
+    });
+}, [item, shade]);
 
   // autofill suggestions
   const itemSuggestion =
