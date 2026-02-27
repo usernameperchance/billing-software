@@ -4,20 +4,22 @@ type BillItem = {
   item: string;
   shade: string;
   qty: number;
+  cost: number;
   price: number;
   total: number;
+  profit: number;
 };
 
 export default function App() {
   const [items, setItems] = useState<BillItem[]>([]);
   const [allItems, setAllItems] = useState<string[]>([]);
   const [shades, setShades] = useState<string[]>([]);
-
   const [item, setItem] = useState("");
   const [shade, setShade] = useState("");
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
-const [warnedKey, setWarnedKey] = useState<string | null>(null);
+  const [cost, setCost] = useState(0);
+  const [warnedKey, setWarnedKey] = useState<string | null>(null);
 
   // fetch items
   useEffect(() => {
@@ -42,10 +44,20 @@ const [warnedKey, setWarnedKey] = useState<string | null>(null);
       .catch(console.error);
   }, [item, allItems]);
 
+  useEffect(() => {
+  if (!item || !shade) return;
+
+  fetch(`/api/getCost?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
+    .then(res => res.json())
+    .then(data => {
+      setCost(data.cost || 0);
+    })
+    .catch(() => setCost(0));
+}, [item, shade]);
+
   // fetch price + stock
 useEffect(() => {
   if (!item || !shade || !shades.includes(shade)) return;
-
   fetch(
     `/api/getPrice?item=${encodeURIComponent(
       item
@@ -102,7 +114,8 @@ useEffect(() => {
     if (!item || !shade || !price) return;
 
     const total = qty * price;
-    setItems([...items, { item, shade, qty, price, total }]);
+    const profit = (price - cost) * qty;
+    setItems([...items, { item, shade, qty, cost, price, total, profit }]);
 
     setShade("");
     setQty(1);
@@ -110,6 +123,7 @@ useEffect(() => {
   };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
+  const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
 
   const saveBill = async () => {
     if (items.length === 0) return;
@@ -227,6 +241,7 @@ useEffect(() => {
         </div>
 
         <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div>
+        <div style={styles.totalBox}>Net profit: ₹{grandProfit}</div>
       </div>
 
       <button style={styles.printBtn} onClick={() => window.print()}>
