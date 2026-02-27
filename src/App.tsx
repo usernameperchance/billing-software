@@ -44,7 +44,7 @@ const [warnedKey, setWarnedKey] = useState<string | null>(null);
 
   // fetch price + stock
 useEffect(() => {
-  if (!item || !shade) return;
+  if (!item || !shade || !shades.includes(shade)) return;
 
   fetch(
     `/api/getPrice?item=${encodeURIComponent(
