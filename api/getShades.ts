@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const response = await gsapi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${item}!A2:A`, // shades/variants in column A of item tab
+      range: `'${item}'!A2:A`, // shades/variants in column A of item tab
     });
 
     const shades = response.data.values?.flat() || [];

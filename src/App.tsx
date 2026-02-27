@@ -166,7 +166,7 @@ useEffect(() => {
               value={item}
               onChange={(e) => setItem(e.target.value)}
               onKeyDown={handleItemKeyDown}
-              placeholder="type item..."
+              placeholder="Item..."
               style={styles.smallInput}
             />
             {itemSuggestion && item !== itemSuggestion && (
@@ -180,7 +180,7 @@ useEffect(() => {
               value={shade}
               onChange={(e) => setShade(e.target.value)}
               onKeyDown={handleShadeKeyDown}
-              placeholder="type shade..."
+              placeholder="Shade/Variant..."
               style={styles.smallInput}
             />
             {shadeSuggestion && shade !== shadeSuggestion && (
@@ -205,7 +205,7 @@ useEffect(() => {
                 addItem();
               }
             }}
-            placeholder="price"
+            placeholder="Price"
             style={styles.smallInput}
           />
           <button style={styles.button} onClick={addItem}>

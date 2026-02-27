@@ -52,7 +52,7 @@ await gsapi.spreadsheets.values.append({
       // fetch current stock
       const stockRes = await gsapi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${item}!A2:B`,
+        range: `'${item}'!A2:B`,
       });
 
       const rows = stockRes.data.values || [];
@@ -64,7 +64,7 @@ await gsapi.spreadsheets.values.append({
         // update stock
         await gsapi.spreadsheets.values.update({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${item}!B${rowIndex + 2}`,
+          range: `'${item}'!B${rowIndex + 2}`,
           valueInputOption: "USER_ENTERED",
           requestBody: { values: [[newStock]] },
         });
@@ -73,7 +73,7 @@ await gsapi.spreadsheets.values.append({
         if (newStock < 2) {
           await gsapi.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${item}!E${rowIndex + 2}`,
+            range: `'${item}'!E${rowIndex + 2}`,
             valueInputOption: "USER_ENTERED",
             requestBody: { values: [["Restock soon ⚠️"]] },
           });
@@ -81,7 +81,7 @@ await gsapi.spreadsheets.values.append({
           // clear alert if stock ok
           await gsapi.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${item}!E${rowIndex + 2}`,
+            range: `'${item}'!E${rowIndex + 2}`,
             valueInputOption: "USER_ENTERED",
             requestBody: { values: [[""]] },
           });
@@ -90,7 +90,7 @@ await gsapi.spreadsheets.values.append({
         // update last updated column
         await gsapi.spreadsheets.values.update({
           spreadsheetId: SPREADSHEET_ID,
-          range: `${item}!D${rowIndex + 2}`,
+          range: `'${item}'!D${rowIndex + 2}`,
           valueInputOption: "USER_ENTERED",
            requestBody: { values: [[`${date} ${time}`]] },
         });
