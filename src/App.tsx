@@ -186,6 +186,11 @@ useEffect(() => {
             type="number"
             value={price}
             onChange={(e) => setPrice(Number(e.target.value))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                addItem();
+              }
+            }}
             placeholder="price"
             style={styles.smallInput}
           />
