@@ -37,10 +37,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { date, time } = getISTDateTime();
 
     // append bill to "bill" tab
-    const billValues = items.map((i: any) => [billNo, i.item, i.shade, i.qty, i.price, i.total, date, time]);
+    const billValues = items.map((i: any) => [billNo, i.item, i.shade, i.qty, i.price, i.total, date, time, i.profit]);
 await gsapi.spreadsheets.values.append({
   spreadsheetId: SPREADSHEET_ID,
-  range: "Bill!A:H",
+  range: "Bill!A:I",
   valueInputOption: "USER_ENTERED",
   requestBody: { values: billValues },
 });
