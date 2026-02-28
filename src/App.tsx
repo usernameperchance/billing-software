@@ -153,6 +153,19 @@ useEffect(() => {
       alert("Failed to save bill");
     }
   };
+  
+  const updateQty = (index: number, newQty: number) => {
+  if (newQty < 1) return;
+  const updated = [...items];
+  updated[index].qty = newQty;
+  updated[index].total = newQty * updated[index].price;
+  updated[index].profit = (updated[index].price - updated[index].cost) * newQty;
+  setItems(updated);
+};
+
+const removeItem = (index: number) => {
+  setItems(items.filter((_, i) => i !== index));
+};
 
   return (
     <div style={styles.container}>
@@ -226,17 +239,24 @@ useEffect(() => {
                 <th>Total</th>
               </tr>
             </thead>
-            <tbody>
-              {items.map((i, idx) => (
-                <tr key={idx}>
-                  <td>{i.item}</td>
-                  <td>{i.shade}</td>
-                  <td>{i.qty}</td>
-                  <td>₹{i.price}</td>
-                  <td>₹{i.total}</td>
-                </tr>
-              ))}
-            </tbody>
+<tbody>
+  {items.map((i, idx) => (
+    <tr key={idx}>
+      <td>{i.item}</td>
+      <td>{i.shade}</td>
+      <td>
+        <button onClick={() => updateQty(idx, i.qty - 1)}>-</button>
+        {i.qty}
+        <button onClick={() => updateQty(idx, i.qty + 1)}>+</button>
+      </td>
+      <td>₹{i.price}</td>
+      <td>₹{i.total}</td>
+      <td>
+        <button onClick={() => removeItem(idx)}>❌</button>
+      </td>
+    </tr>
+  ))}
+</tbody>
           </table>
         </div>
 
