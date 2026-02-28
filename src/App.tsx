@@ -21,7 +21,6 @@ export default function App() {
   const [cost, setCost] = useState(0);
   const [warnedKey, setWarnedKey] = useState<string | null>(null);
   const [billMeta, setBillMeta] = useState<{ billNo: number; date: string; time: string } | null>(null);
-  // 🟡 FIX: loading state to prevent double-submit
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -31,7 +30,6 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // fetch items
   useEffect(() => {
     fetch("/api/getItems")
       .then((res) => res.json())
@@ -39,7 +37,6 @@ export default function App() {
       .catch(console.error);
   }, []);
 
-  // fetch shades when item fully matches
   useEffect(() => {
     if (!item || !allItems.includes(item)) {
       setShades([]);
@@ -47,7 +44,6 @@ export default function App() {
       setPrice(0);
       return;
     }
-
     fetch(`/api/getShades?item=${encodeURIComponent(item)}`)
       .then((res) => res.json())
       .then((data) => setShades(data.shades || []))
@@ -56,39 +52,27 @@ export default function App() {
 
   useEffect(() => {
     if (!item || !shade) return;
-
     fetch(`/api/getCost?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then(res => res.json())
-      .then(data => {
-        setCost(data.cost || 0);
-      })
+      .then(data => setCost(data.cost || 0))
       .catch(() => setCost(0));
   }, [item, shade]);
 
-  // fetch price + stock
-  // 🟠 FIX: added warnedKey to dependency array to avoid stale closure
   useEffect(() => {
     if (!item || !shade || !shades.includes(shade)) return;
-    fetch(
-      `/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`
-    )
+    fetch(`/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then((res) => res.json())
       .then((data) => {
         setPrice(data.price || 0);
-
         const stockQty = Number(data.qty ?? -1);
-
         if (stockQty >= 0 && stockQty < 2 && warnedKey !== `${item}-${shade}`) {
           window.alert("low stock for this shade. check the stock sheet for details.");
           setWarnedKey(`${item}-${shade}`);
         }
       })
-      .catch(() => {
-        setPrice(0);
-      });
+      .catch(() => setPrice(0));
   }, [item, shade, warnedKey]);
 
-  // autofill suggestions
   const itemSuggestion =
     item && allItems.find((i) => i.toLowerCase().startsWith(item.toLowerCase()));
 
@@ -111,13 +95,11 @@ export default function App() {
 
   const addItem = () => {
     if (!item || !shade || !price) return;
-
     const total = qty * price;
     const profit = (price - cost) * qty;
     setItems([...items, { item, shade, qty, cost, price, total, profit }]);
-
     setShade("");
-    setQty(1); // 🟡 FIX: reset qty after adding
+    setQty(1);
     setPrice(0);
   };
 
@@ -125,8 +107,7 @@ export default function App() {
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
 
   const saveBill = async () => {
-    if (items.length === 0 || saving) return; // 🟡 FIX: guard against double-submit
-
+    if (items.length === 0 || saving) return;
     setSaving(true);
     try {
       const res = await fetch("/api/bill", {
@@ -134,16 +115,11 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items }),
       });
-
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Failed");
-
-      // 🟠 FIX: refresh billMeta from server after saving so bill number updates
       const metaRes = await fetch("/api/bill");
       const meta = await metaRes.json();
       setBillMeta(meta);
-
       alert("Bill saved");
       setItems([]);
       setItem("");
@@ -170,13 +146,34 @@ export default function App() {
   };
 
   return (
-    // 🔴 FIX: outer container now properly wraps ALL content
-    <div className="no-print" style={styles.container}>
+    <div className="app-container" style={styles.container}>
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body, html {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+          .app-container {
+            background: transparent !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            max-width: 100% !important;
+          }
+          #print-bill div {
+            box-shadow: none !important;
+            background: transparent !important;
+          }
+        }
+      `}</style>
+
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
 
       <div className="no-print" style={styles.card}>
-        <div className="no-print" style={styles.row}>
-          {/* ITEM AUTOFILL */}
+        <div style={styles.row}>
           <div style={styles.autofillWrapper}>
             <input
               value={item}
@@ -190,8 +187,7 @@ export default function App() {
             )}
           </div>
 
-          {/* SHADE AUTOFILL */}
-          <div className="no-print" style={styles.autofillWrapper}>
+          <div style={styles.autofillWrapper}>
             <input
               value={shade}
               onChange={(e) => setShade(e.target.value)}
@@ -210,28 +206,23 @@ export default function App() {
             value={qty}
             onChange={(e) => setQty(Number(e.target.value))}
             placeholder="qty"
-            className="no-print" 
             style={styles.smallInput}
           />
           <input
             type="number"
             value={price}
             onChange={(e) => setPrice(Number(e.target.value))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addItem();
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter") addItem(); }}
             placeholder="Price"
-            className="no-print" 
             style={styles.smallInput}
           />
-          <button className="no-print" style={styles.button} onClick={addItem}>
+          <button style={styles.button} onClick={addItem}>
             Add
           </button>
         </div>
       </div>
 
-      {/* 🔴 FIX: className="print-area" added so CSS print rules actually apply */}
-      <div id="print-bill" className="print-area">
+      <div id="print-bill">
         <img src="/logo.png" alt="Logo" style={{ width: 120, marginBottom: 10 }} />
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
           <div>Bill No: {billMeta?.billNo || "N/A"}</div>
@@ -278,7 +269,6 @@ export default function App() {
       <button className="no-print" style={styles.printBtn} onClick={() => window.print()}>
         Print Bill
       </button>
-      {/* 🟡 FIX: button disabled while saving */}
       <button
         className="no-print"
         style={{ ...styles.printBtn, opacity: saving ? 0.6 : 1 }}
@@ -287,7 +277,7 @@ export default function App() {
       >
         {saving ? "Saving..." : "Save to Sheets"}
       </button>
-    </div> // closes container
+    </div>
   );
 }
 
