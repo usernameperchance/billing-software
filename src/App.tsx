@@ -416,7 +416,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: "flex-start",
     marginBottom: 16,
   },
-  logo: { width: 100, objectFit: "contain" },
+  logo: { width: 180, maxHeight: 80, objectFit: "contain", objectPosition: "left center" },
   billMeta: { display: "flex", flexDirection: "column", gap: 4, textAlign: "right" },
   billMetaRow: { display: "flex", gap: 12, justifyContent: "flex-end", alignItems: "center" },
   metaLabel: { fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, minWidth: 36 },

@@ -23,32 +23,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const client = await auth.getClient();
     const gsapi = google.sheets({ version: "v4", auth: client as any });
 
-    // 🟠 FIX: GET handler added — returns the latest bill number + date/time
+    // GET — return latest bill number so frontend can show next bill no
     if (req.method === "GET") {
       const billSheet = await gsapi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: "Bill!A:H",
+        range: "Bill!A:A",
       });
 
-      const rows = billSheet.data.values || [];
-      // skip header row, get the last row
-      const lastRow = rows.length > 1 ? rows[rows.length - 1] : null;
+      const allValues = billSheet.data.values?.flat().filter(v => v) || [];
+      const lastBillNo = allValues.map(Number).filter(n => !isNaN(n) && n > 0).pop() || 0;
 
-      if (!lastRow) {
-        return res.status(200).json({ billNo: null, date: null, time: null });
-      }
-
-      return res.status(200).json({
-        billNo: Number(lastRow[0]),
-        date: lastRow[6] || null,
-        time: lastRow[7] || null,
-      });
+      return res.status(200).json({ billNo: lastBillNo });
     }
 
     // POST — save bill
     if (req.method === "POST") {
-      // 🟢 FIX: removed unused clientDate / clientTime destructuring
-      const { items } = req.body;
+      const { items, discountAmt = 0, discountPct = 0, finalTotal } = req.body;
+
       if (!items || !Array.isArray(items)) {
         return res.status(400).json({ error: "Invalid items" });
       }
@@ -58,12 +49,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         range: "Bill!A:A",
       });
 
-      const lastBillNo =
-        billSheet.data.values?.flat().filter(v => v).map(Number).pop() || 0;
-      const billNo = lastBillNo + 1; // 🟢 FIX: billNo always comes from server, not frontend
+      const allValues = billSheet.data.values?.flat().filter(v => v) || [];
+      const lastBillNo = allValues.map(Number).filter(n => !isNaN(n) && n > 0).pop() || 0;
+      const billNo = lastBillNo + 1;
 
       const { date, time } = getISTDateTime();
 
+      // one row per item
       const billValues = items.map((i: any) => [
         billNo,
         i.item,
@@ -82,6 +74,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         valueInputOption: "USER_ENTERED",
         requestBody: { values: billValues },
       });
+
+      // append discount + final total as summary rows at end of bill
+      if (discountAmt > 0) {
+        await gsapi.spreadsheets.values.append({
+          spreadsheetId: SPREADSHEET_ID,
+          range: "Bill!A:J",
+          valueInputOption: "USER_ENTERED",
+          requestBody: {
+            values: [
+              [billNo, "", "", "", "Discount", `-₹${discountAmt}`, date, time, "", `${discountPct}%`],
+              [billNo, "", "", "", "Final Total", finalTotal ?? "", date, time, ""],
+            ],
+          },
+        });
+      }
 
       // update stock in respective item tabs
       for (const i of items) {
@@ -110,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             spreadsheetId: SPREADSHEET_ID,
             range: `'${item}'!E${rowIndex + 2}`,
             valueInputOption: "USER_ENTERED",
-            requestBody: { values: [[newStock < 2 ? "Restock soon ⚠️" : ""]] },
+            requestBody: { values: [[newStock < 2 ? "⚠️ | RESTOCK" : ""]] },
           });
 
           await gsapi.spreadsheets.values.update({
