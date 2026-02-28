@@ -278,10 +278,10 @@ const removeItem = (index: number) => {
         <div className="no-print" style={styles.totalBox}>Net profit: ₹{grandProfit}</div>
       </div>
 
-      <button style={styles.printBtn} onClick={() => window.print()}>
+      <button className="no-print" style={styles.printBtn} onClick={() => window.print()}>
         Print Bill
       </button>
-      <button style={styles.printBtn} onClick={saveBill}>
+      <button className="no-print" style={styles.printBtn} onClick={saveBill}>
         Save to Sheets
       </button>
     </div>
