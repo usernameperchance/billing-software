@@ -10,6 +10,8 @@ type BillItem = {
   profit: number;
 };
 
+type Slab = { minTotal: number; pct: number };
+
 export default function App() {
   const [items, setItems] = useState<BillItem[]>([]);
   const [allItems, setAllItems] = useState<string[]>([]);
@@ -22,16 +24,20 @@ export default function App() {
   const [warnedKey, setWarnedKey] = useState<string | null>(null);
   const [nextBillNo, setNextBillNo] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [slabs, setSlabs] = useState<Slab[]>([]);
 
-  // current IST date+time for display on bill
-  const now = new Date();
-  const billDate = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
-  const billTime = now.toLocaleTimeString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  // locked to session start, not re-render time
+  const [billDate] = useState(() =>
+    new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
+  );
+  const [billTime] = useState(() =>
+    new Date().toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
+  );
 
   const fetchNextBillNo = () => {
     fetch("/api/bill")
@@ -47,6 +53,13 @@ export default function App() {
       .then((res) => res.json())
       .then((data) => setAllItems(data.items || []))
       .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/getDiscounts")
+      .then(res => res.json())
+      .then(data => setSlabs(data.slabs || []))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -117,6 +130,16 @@ export default function App() {
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
 
+  const getApplicableSlab = (total: number) => {
+    return [...slabs]
+      .sort((a, b) => b.minTotal - a.minTotal)
+      .find(s => total >= s.minTotal) || null;
+  };
+
+  const applicableSlab = getApplicableSlab(grandTotal);
+  const discountAmt = applicableSlab ? Math.round(grandTotal * applicableSlab.pct / 100) : 0;
+  const finalTotal = grandTotal - discountAmt;
+
   const saveBill = async () => {
     if (items.length === 0 || saving) return;
     setSaving(true);
@@ -124,7 +147,7 @@ export default function App() {
       const res = await fetch("/api/bill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, discountAmt, discountPct: applicableSlab?.pct ?? 0, finalTotal }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
@@ -159,6 +182,7 @@ export default function App() {
       <style>{`
         @media print {
           .no-print { display: none !important; }
+          .print-only { display: inline !important; }
           body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
           .app-container {
             background: transparent !important;
@@ -252,7 +276,7 @@ export default function App() {
             <tr style={styles.theadRow}>
               <th style={{ ...styles.th, width: "5%", textAlign: "center" }}>#</th>
               <th style={{ ...styles.th, width: "30%" }}>Item</th>
-              <th style={{ ...styles.th, width: "30%" }}>Shade / Type</th>
+              <th style={{ ...styles.th, width: "28%" }}>Shade / Type</th>
               <th style={{ ...styles.th, width: "10%", textAlign: "center" }}>Qty</th>
               <th style={{ ...styles.th, width: "12%", textAlign: "right" }}>Price</th>
               <th style={{ ...styles.th, width: "13%", textAlign: "right" }}>Total</th>
@@ -273,10 +297,10 @@ export default function App() {
                   <td style={styles.td}>{i.item}</td>
                   <td style={styles.td}>{i.shade}</td>
                   <td style={{ ...styles.td, textAlign: "center" }}>
-                    <span style={styles.qtyControls}>
-                      <button className="no-print" style={styles.qtyBtn} onClick={() => updateQty(idx, i.qty - 1)}>−</button>
+                    <span className="no-print" style={styles.qtyControls}>
+                      <button style={styles.qtyBtn} onClick={() => updateQty(idx, i.qty - 1)}>−</button>
                       <span style={styles.qtyNum}>{i.qty}</span>
-                      <button className="no-print" style={styles.qtyBtn} onClick={() => updateQty(idx, i.qty + 1)}>+</button>
+                      <button style={styles.qtyBtn} onClick={() => updateQty(idx, i.qty + 1)}>+</button>
                     </span>
                     <span className="print-only" style={{ display: "none" }}>{i.qty}</span>
                   </td>
@@ -299,9 +323,15 @@ export default function App() {
             <span>Net Profit</span>
             <span>₹{grandProfit}</span>
           </div>
+          {applicableSlab && (
+            <div style={styles.discountRow}>
+              <span>Discount ({applicableSlab.pct}%)</span>
+              <span>− ₹{discountAmt}</span>
+            </div>
+          )}
           <div style={styles.grandTotalRow}>
             <span>Grand Total</span>
-            <span>₹{grandTotal}</span>
+            <span>₹{finalTotal}</span>
           </div>
         </div>
 
@@ -457,6 +487,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: 48,
     fontSize: 14,
     color: "#666",
+  },
+  discountRow: {
+    display: "flex",
+    gap: 48,
+    fontSize: 14,
+    color: "#e1c26a",
+    fontWeight: 600,
   },
   grandTotalRow: {
     display: "flex",
