@@ -20,7 +20,15 @@ export default function App() {
   const [price, setPrice] = useState(0);
   const [cost, setCost] = useState(0);
   const [warnedKey, setWarnedKey] = useState<string | null>(null);
+  const [billMeta, setBillMeta] = useState<{ billNo: number; date: string; time: string } | null>(null);
 
+  useEffect(() => {
+  fetch("/api/bill")
+    .then(res => res.json())
+    .then(data => setBillMeta(data))
+    .catch(() => {});
+}, []);
+  
   // fetch items
   useEffect(() => {
     fetch("/api/getItems")
@@ -227,7 +235,13 @@ const removeItem = (index: number) => {
         </div>
       </div>
 
-      <div id="bill-area">
+      <div id="print-bill">
+        <img src ="/logo.png" alt="Logo" style={{ width: 120, marginBottom: 10 }} />
+        <div style ={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+          <div>Bill No: {billMeta?.billNo || "N/A"}</div>
+          <div>{billMeta ? `${billMeta.date} ${billMeta.time}` : "Date/Time: N/A"}</div>
+        </div>
+        
         <div style={styles.tableCard}>
           <table style={styles.table}>
             <thead>
@@ -245,14 +259,14 @@ const removeItem = (index: number) => {
       <td>{i.item}</td>
       <td>{i.shade}</td>
       <td>
-        <button onClick={() => updateQty(idx, i.qty - 1)}>-</button>
+        <button className="no-print" onClick={() => updateQty(idx, i.qty - 1)}>-</button>
         {i.qty}
-        <button onClick={() => updateQty(idx, i.qty + 1)}>+</button>
+        <button className="no-print" onClick={() => updateQty(idx, i.qty + 1)}>+</button>
       </td>
       <td>₹{i.price}</td>
       <td>₹{i.total}</td>
       <td>
-        <button onClick={() => removeItem(idx)}>❌</button>
+        <button className="no-print" onClick={() => removeItem(idx)}>❌</button>
       </td>
     </tr>
   ))}
@@ -261,7 +275,7 @@ const removeItem = (index: number) => {
         </div>
 
         <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div>
-        <div style={styles.totalBox}>Net profit: ₹{grandProfit}</div>
+        <div className="no-print" style={styles.totalBox}>Net profit: ₹{grandProfit}</div>
       </div>
 
       <button style={styles.printBtn} onClick={() => window.print()}>

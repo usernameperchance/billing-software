@@ -1,16 +1,6 @@
 @media print {
-  body * {
-    visibility: hidden;
-  }
-
-  #bill-area, #bill-area * {
-    visibility: visible;
-  }
-
-  #bill-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-  }
+  body * { visibility: hidden; }
+  #print-bill, #print-bill * { visibility: visible; }
+  #print-bill { position: absolute; left: 0; top: 0; width: 100%; }
+  .no-print { display: none !important; }
 }
