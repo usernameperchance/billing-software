@@ -251,7 +251,7 @@ export default function App() {
 
         {/* Header */}
         <div style={styles.billHeader}>
-          <img src="/logo.jpg" alt="Logo" style={styles.logo} />
+          <img src="/logo.svg" alt="Logo" style={styles.logo} />
           <div style={styles.billMeta}>
             <div style={styles.billMetaRow}>
               <span style={styles.metaLabel}>Bill No</span>
@@ -412,9 +412,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   billHeader: {
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+    flexDirection: "column",
+    alignItems: "center",
     marginBottom: 16,
+    gap: 10,
   },
   logo: { width: 220, maxHeight: 100, objectFit: "contain" },
   billMeta: { display: "flex", flexDirection: "column", gap: 4, alignSelf: "flex-end", textAlign: "right" },
@@ -492,7 +493,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: "flex",
     gap: 48,
     fontSize: 14,
-    color: "#e1c26a",
+    color: "#e07000",
     fontWeight: 600,
   },
   grandTotalRow: {
