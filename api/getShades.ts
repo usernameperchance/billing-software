@@ -21,11 +21,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const response = await gsapi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `'${item}'!A2:A`, // shades/variants in column A of item tab
+      range: `'${item}'!A2:A`,
     });
 
-    const shades = response.data.values?.flat() || [];
-    res.status(200).json({ shades: response.data.values?.flatMap(v => v) || [] });
+    // 🟢 FIX: removed unused `shades` variable, compute once and use directly
+    const shades = response.data.values?.flatMap(v => v) || [];
+    res.status(200).json({ shades });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch shades" });

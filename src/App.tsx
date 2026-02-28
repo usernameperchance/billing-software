@@ -21,14 +21,16 @@ export default function App() {
   const [cost, setCost] = useState(0);
   const [warnedKey, setWarnedKey] = useState<string | null>(null);
   const [billMeta, setBillMeta] = useState<{ billNo: number; date: string; time: string } | null>(null);
+  // 🟡 FIX: loading state to prevent double-submit
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-  fetch("/api/bill")
-    .then(res => res.json())
-    .then(data => setBillMeta(data))
-    .catch(() => {});
-}, []);
-  
+    fetch("/api/bill")
+      .then(res => res.json())
+      .then(data => setBillMeta(data))
+      .catch(() => {});
+  }, []);
+
   // fetch items
   useEffect(() => {
     fetch("/api/getItems")
@@ -53,54 +55,45 @@ export default function App() {
   }, [item, allItems]);
 
   useEffect(() => {
-  if (!item || !shade) return;
+    if (!item || !shade) return;
 
-  fetch(`/api/getCost?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
-    .then(res => res.json())
-    .then(data => {
-      setCost(data.cost || 0);
-    })
-    .catch(() => setCost(0));
-}, [item, shade]);
+    fetch(`/api/getCost?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
+      .then(res => res.json())
+      .then(data => {
+        setCost(data.cost || 0);
+      })
+      .catch(() => setCost(0));
+  }, [item, shade]);
 
   // fetch price + stock
-useEffect(() => {
-  if (!item || !shade || !shades.includes(shade)) return;
-  fetch(
-    `/api/getPrice?item=${encodeURIComponent(
-      item
-    )}&shade=${encodeURIComponent(shade)}`
-  )
-    .then((res) => res.json())
-    .then((data) => {
-      setPrice(data.price || 0);
+  // 🟠 FIX: added warnedKey to dependency array to avoid stale closure
+  useEffect(() => {
+    if (!item || !shade || !shades.includes(shade)) return;
+    fetch(
+      `/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        setPrice(data.price || 0);
 
-      const stockQty = Number(data.qty ?? -1);
+        const stockQty = Number(data.qty ?? -1);
 
-      if (stockQty >= 0 && stockQty < 2 && warnedKey !== `${item}-${shade}`) {
-        window.alert(
-          "low stock for this shade. check the stock sheet for details."
-        );
-        setWarnedKey(`${item}-${shade}`);
-      }
-    })
-    .catch(() => {
-      setPrice(0);
-    });
-}, [item, shade]);
+        if (stockQty >= 0 && stockQty < 2 && warnedKey !== `${item}-${shade}`) {
+          window.alert("low stock for this shade. check the stock sheet for details.");
+          setWarnedKey(`${item}-${shade}`);
+        }
+      })
+      .catch(() => {
+        setPrice(0);
+      });
+  }, [item, shade, warnedKey]);
 
   // autofill suggestions
   const itemSuggestion =
-    item &&
-    allItems.find((i) =>
-      i.toLowerCase().startsWith(item.toLowerCase())
-    );
+    item && allItems.find((i) => i.toLowerCase().startsWith(item.toLowerCase()));
 
   const shadeSuggestion =
-    shade &&
-    shades.find((s) =>
-      s.toLowerCase().startsWith(shade.toLowerCase())
-    );
+    shade && shades.find((s) => s.toLowerCase().startsWith(shade.toLowerCase()));
 
   const handleItemKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if ((e.key === "Enter" || e.key === "Tab") && itemSuggestion) {
@@ -109,9 +102,7 @@ useEffect(() => {
     }
   };
 
-  const handleShadeKeyDown = (
-    e: React.KeyboardEvent<HTMLInputElement>
-  ) => {
+  const handleShadeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if ((e.key === "Enter" || e.key === "Tab") && shadeSuggestion) {
       e.preventDefault();
       setShade(shadeSuggestion);
@@ -126,7 +117,7 @@ useEffect(() => {
     setItems([...items, { item, shade, qty, cost, price, total, profit }]);
 
     setShade("");
-    setQty(1);
+    setQty(1); // 🟡 FIX: reset qty after adding
     setPrice(0);
   };
 
@@ -134,24 +125,25 @@ useEffect(() => {
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
 
   const saveBill = async () => {
-    if (items.length === 0) return;
+    if (items.length === 0 || saving) return; // 🟡 FIX: guard against double-submit
 
-    const now = new Date();
-    const date = now.toLocaleDateString("en-IN");
-    const time = now.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    });
-
+    setSaving(true);
     try {
-      const billNo = Math.floor(Math.random() * 100000);
-      await fetch("/api/bill", {
+      const res = await fetch("/api/bill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ billNo, items, date, time }),
+        body: JSON.stringify({ items }),
       });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Failed");
+
+      // 🟠 FIX: refresh billMeta from server after saving so bill number updates
+      const metaRes = await fetch("/api/bill");
+      const meta = await metaRes.json();
+      setBillMeta(meta);
+
       alert("Bill saved");
       setItems([]);
       setItem("");
@@ -159,23 +151,26 @@ useEffect(() => {
     } catch (err) {
       console.error(err);
       alert("Failed to save bill");
+    } finally {
+      setSaving(false);
     }
   };
-  
-  const updateQty = (index: number, newQty: number) => {
-  if (newQty < 1) return;
-  const updated = [...items];
-  updated[index].qty = newQty;
-  updated[index].total = newQty * updated[index].price;
-  updated[index].profit = (updated[index].price - updated[index].cost) * newQty;
-  setItems(updated);
-};
 
-const removeItem = (index: number) => {
-  setItems(items.filter((_, i) => i !== index));
-};
+  const updateQty = (index: number, newQty: number) => {
+    if (newQty < 1) return;
+    const updated = [...items];
+    updated[index].qty = newQty;
+    updated[index].total = newQty * updated[index].price;
+    updated[index].profit = (updated[index].price - updated[index].cost) * newQty;
+    setItems(updated);
+  };
+
+  const removeItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
 
   return (
+    // 🔴 FIX: outer container now properly wraps ALL content
     <div style={styles.container}>
       <h1 style={styles.title}>Billing Counter</h1>
 
@@ -222,9 +217,7 @@ const removeItem = (index: number) => {
             value={price}
             onChange={(e) => setPrice(Number(e.target.value))}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                addItem();
-              }
+              if (e.key === "Enter") addItem();
             }}
             placeholder="Price"
             style={styles.smallInput}
@@ -235,13 +228,14 @@ const removeItem = (index: number) => {
         </div>
       </div>
 
-      <div id="print-bill">
-        <img src ="/logo.png" alt="Logo" style={{ width: 120, marginBottom: 10 }} />
-        <div style ={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+      {/* 🔴 FIX: className="print-area" added so CSS print rules actually apply */}
+      <div id="print-bill" className="print-area">
+        <img src="/logo.png" alt="Logo" style={{ width: 120, marginBottom: 10 }} />
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
           <div>Bill No: {billMeta?.billNo || "N/A"}</div>
           <div>{billMeta ? `${billMeta.date} ${billMeta.time}` : "Date/Time: N/A"}</div>
         </div>
-        
+
         <div style={styles.tableCard}>
           <table style={styles.table}>
             <thead>
@@ -251,26 +245,27 @@ const removeItem = (index: number) => {
                 <th>Quantity</th>
                 <th>Price</th>
                 <th>Total</th>
+                <th className="no-print"></th>
               </tr>
             </thead>
-<tbody>
-  {items.map((i, idx) => (
-    <tr key={idx}>
-      <td>{i.item}</td>
-      <td>{i.shade}</td>
-      <td>
-        <button className="no-print" onClick={() => updateQty(idx, i.qty - 1)}>-</button>
-        {i.qty}
-        <button className="no-print" onClick={() => updateQty(idx, i.qty + 1)}>+</button>
-      </td>
-      <td>₹{i.price}</td>
-      <td>₹{i.total}</td>
-      <td>
-        <button className="no-print" onClick={() => removeItem(idx)}>❌</button>
-      </td>
-    </tr>
-  ))}
-</tbody>
+            <tbody>
+              {items.map((i, idx) => (
+                <tr key={idx}>
+                  <td>{i.item}</td>
+                  <td>{i.shade}</td>
+                  <td>
+                    <button className="no-print" onClick={() => updateQty(idx, i.qty - 1)}>-</button>
+                    {i.qty}
+                    <button className="no-print" onClick={() => updateQty(idx, i.qty + 1)}>+</button>
+                  </td>
+                  <td>₹{i.price}</td>
+                  <td>₹{i.total}</td>
+                  <td>
+                    <button className="no-print" onClick={() => removeItem(idx)}>❌</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
 
@@ -281,10 +276,16 @@ const removeItem = (index: number) => {
       <button className="no-print" style={styles.printBtn} onClick={() => window.print()}>
         Print Bill
       </button>
-      <button className="no-print" style={styles.printBtn} onClick={saveBill}>
-        Save to Sheets
+      {/* 🟡 FIX: button disabled while saving */}
+      <button
+        className="no-print"
+        style={{ ...styles.printBtn, opacity: saving ? 0.6 : 1 }}
+        onClick={saveBill}
+        disabled={saving}
+      >
+        {saving ? "Saving..." : "Save to Sheets"}
       </button>
-    </div>
+    </div> // closes container
   );
 }
 

@@ -7,12 +7,16 @@
     visibility: hidden;
   }
 
+  /* 🔴 FIX: target both the class AND the id so print works */
   .print-area,
-  .print-area * {
+  #print-bill,
+  .print-area *,
+  #print-bill * {
     visibility: visible;
   }
 
-  .print-area {
+  .print-area,
+  #print-bill {
     position: absolute;
     left: 0;
     top: 0;
