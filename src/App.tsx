@@ -20,15 +20,27 @@ export default function App() {
   const [price, setPrice] = useState(0);
   const [cost, setCost] = useState(0);
   const [warnedKey, setWarnedKey] = useState<string | null>(null);
-  const [billMeta, setBillMeta] = useState<{ billNo: number; date: string; time: string } | null>(null);
+  const [nextBillNo, setNextBillNo] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  // current IST date+time for display on bill
+  const now = new Date();
+  const billDate = now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
+  const billTime = now.toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  const fetchNextBillNo = () => {
     fetch("/api/bill")
       .then(res => res.json())
-      .then(data => setBillMeta(data))
-      .catch(() => {});
-  }, []);
+      .then(data => setNextBillNo((data.billNo || 0) + 1))
+      .catch(() => setNextBillNo(1));
+  };
+
+  useEffect(() => { fetchNextBillNo(); }, []);
 
   useEffect(() => {
     fetch("/api/getItems")
@@ -75,7 +87,6 @@ export default function App() {
 
   const itemSuggestion =
     item && allItems.find((i) => i.toLowerCase().startsWith(item.toLowerCase()));
-
   const shadeSuggestion =
     shade && shades.find((s) => s.toLowerCase().startsWith(shade.toLowerCase()));
 
@@ -117,9 +128,7 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
-      const metaRes = await fetch("/api/bill");
-      const meta = await metaRes.json();
-      setBillMeta(meta);
+      fetchNextBillNo();
       alert("Bill saved");
       setItems([]);
       setItem("");
@@ -150,11 +159,7 @@ export default function App() {
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          body, html {
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white !important;
-          }
+          body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
           .app-container {
             background: transparent !important;
             box-shadow: none !important;
@@ -163,15 +168,14 @@ export default function App() {
             padding: 0 !important;
             max-width: 100% !important;
           }
-          #print-bill div {
-            box-shadow: none !important;
-            background: transparent !important;
-          }
+          #print-bill { padding: 24px !important; }
+          #print-bill div { box-shadow: none !important; }
+          .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
 
+      {/* ── INPUT AREA (no-print) ── */}
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
-
       <div className="no-print" style={styles.card}>
         <div style={styles.row}>
           <div style={styles.autofillWrapper}>
@@ -186,7 +190,6 @@ export default function App() {
               <span style={styles.suggestion}>{itemSuggestion}</span>
             )}
           </div>
-
           <div style={styles.autofillWrapper}>
             <input
               value={shade}
@@ -199,14 +202,13 @@ export default function App() {
               <span style={styles.suggestion}>{shadeSuggestion}</span>
             )}
           </div>
-
           <input
             type="number"
             min="1"
             value={qty}
             onChange={(e) => setQty(Number(e.target.value))}
-            placeholder="qty"
-            style={styles.smallInput}
+            placeholder="Qty"
+            style={{ ...styles.smallInput, maxWidth: 80 }}
           />
           <input
             type="number"
@@ -214,144 +216,271 @@ export default function App() {
             onChange={(e) => setPrice(Number(e.target.value))}
             onKeyDown={(e) => { if (e.key === "Enter") addItem(); }}
             placeholder="Price"
-            style={styles.smallInput}
+            style={{ ...styles.smallInput, maxWidth: 100 }}
           />
-          <button style={styles.button} onClick={addItem}>
-            Add
-          </button>
+          <button style={styles.button} onClick={addItem}>Add</button>
         </div>
       </div>
 
-      <div id="print-bill">
-        <img src="/logo.png" alt="Logo" style={{ width: 120, marginBottom: 10 }} />
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-          <div>Bill No: {billMeta?.billNo || "N/A"}</div>
-          <div>{billMeta ? `${billMeta.date} ${billMeta.time}` : "Date/Time: N/A"}</div>
+      {/* ── BILL AREA (prints) ── */}
+      <div id="print-bill" style={styles.billArea}>
+
+        {/* Header */}
+        <div style={styles.billHeader}>
+          <img src="/logo.jpg" alt="Logo" style={styles.logo} />
+          <div style={styles.billMeta}>
+            <div style={styles.billMetaRow}>
+              <span style={styles.metaLabel}>Bill No</span>
+              <span style={styles.metaValue}>#{nextBillNo ?? "—"}</span>
+            </div>
+            <div style={styles.billMetaRow}>
+              <span style={styles.metaLabel}>Date</span>
+              <span style={styles.metaValue}>{billDate}</span>
+            </div>
+            <div style={styles.billMetaRow}>
+              <span style={styles.metaLabel}>Time</span>
+              <span style={styles.metaValue}>{billTime}</span>
+            </div>
+          </div>
         </div>
 
-        <div style={styles.tableCard}>
-          <table style={styles.table}>
-            <thead>
+        <hr style={styles.divider} />
+
+        {/* Table */}
+        <table className="bill-table" style={styles.table}>
+          <thead>
+            <tr style={styles.theadRow}>
+              <th style={{ ...styles.th, width: "5%", textAlign: "center" }}>#</th>
+              <th style={{ ...styles.th, width: "30%" }}>Item</th>
+              <th style={{ ...styles.th, width: "30%" }}>Shade / Type</th>
+              <th style={{ ...styles.th, width: "10%", textAlign: "center" }}>Qty</th>
+              <th style={{ ...styles.th, width: "12%", textAlign: "right" }}>Price</th>
+              <th style={{ ...styles.th, width: "13%", textAlign: "right" }}>Total</th>
+              <th className="no-print" style={{ ...styles.th, width: "5%" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
               <tr>
-                <th>Item</th>
-                <th>Shade/Type</th>
-                <th>Quantity</th>
-                <th>Price</th>
-                <th>Total</th>
-                <th className="no-print"></th>
+                <td colSpan={7} style={{ textAlign: "center", padding: "24px 0", color: "#aaa", fontSize: 14 }}>
+                  No items added yet
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {items.map((i, idx) => (
-                <tr key={idx}>
-                  <td>{i.item}</td>
-                  <td>{i.shade}</td>
-                  <td>
-                    <button className="no-print" onClick={() => updateQty(idx, i.qty - 1)}>-</button>
-                    {i.qty}
-                    <button className="no-print" onClick={() => updateQty(idx, i.qty + 1)}>+</button>
+            ) : (
+              items.map((i, idx) => (
+                <tr key={idx} style={idx % 2 === 0 ? styles.trEven : styles.trOdd}>
+                  <td style={{ ...styles.td, textAlign: "center", color: "#999", fontSize: 13 }}>{idx + 1}</td>
+                  <td style={styles.td}>{i.item}</td>
+                  <td style={styles.td}>{i.shade}</td>
+                  <td style={{ ...styles.td, textAlign: "center" }}>
+                    <span style={styles.qtyControls}>
+                      <button className="no-print" style={styles.qtyBtn} onClick={() => updateQty(idx, i.qty - 1)}>−</button>
+                      <span style={styles.qtyNum}>{i.qty}</span>
+                      <button className="no-print" style={styles.qtyBtn} onClick={() => updateQty(idx, i.qty + 1)}>+</button>
+                    </span>
+                    <span className="print-only" style={{ display: "none" }}>{i.qty}</span>
                   </td>
-                  <td>₹{i.price}</td>
-                  <td>₹{i.total}</td>
-                  <td>
-                    <button className="no-print" onClick={() => removeItem(idx)}>❌</button>
+                  <td style={{ ...styles.td, textAlign: "right" }}>₹{i.price}</td>
+                  <td style={{ ...styles.td, textAlign: "right", fontWeight: 600 }}>₹{i.total}</td>
+                  <td className="no-print" style={{ ...styles.td, textAlign: "center" }}>
+                    <button style={styles.removeBtn} onClick={() => removeItem(idx)}>✕</button>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        <hr style={styles.divider} />
+
+        {/* Totals */}
+        <div style={styles.totalsBlock}>
+          <div className="no-print" style={styles.profitRow}>
+            <span>Net Profit</span>
+            <span>₹{grandProfit}</span>
+          </div>
+          <div style={styles.grandTotalRow}>
+            <span>Grand Total</span>
+            <span>₹{grandTotal}</span>
+          </div>
         </div>
 
-        <div style={styles.totalBox}>Grand total: ₹{grandTotal}</div>
-        <div className="no-print" style={styles.totalBox}>Net profit: ₹{grandProfit}</div>
+        <p style={styles.thankYou}>Thank you for your purchase!</p>
       </div>
 
-      <button className="no-print" style={styles.printBtn} onClick={() => window.print()}>
-        Print Bill
-      </button>
-      <button
-        className="no-print"
-        style={{ ...styles.printBtn, opacity: saving ? 0.6 : 1 }}
-        onClick={saveBill}
-        disabled={saving}
-      >
-        {saving ? "Saving..." : "Save to Sheets"}
-      </button>
+      {/* ── ACTION BUTTONS ── */}
+      <div className="no-print" style={styles.actions}>
+        <button style={styles.printBtn} onClick={() => window.print()}>🖨 Print Bill</button>
+        <button
+          style={{ ...styles.printBtn, opacity: saving ? 0.6 : 1 }}
+          onClick={saveBill}
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "💾 Save to Sheets"}
+        </button>
+      </div>
     </div>
   );
 }
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    maxWidth: 900,
-    margin: "40px auto",
+    maxWidth: 860,
+    margin: "36px auto",
     fontFamily: "Montserrat, Arial, sans-serif",
     background: "#f4f6f8",
     padding: 20,
     borderRadius: 14,
   },
-  title: { textAlign: "center", marginBottom: 25, fontWeight: 600 },
+  title: { textAlign: "center", marginBottom: 20, fontWeight: 700, fontSize: 22, letterSpacing: 0.5 },
   card: {
-    background: "#ffffff",
-    padding: 18,
+    background: "#fff",
+    padding: 16,
     borderRadius: 12,
-    marginBottom: 25,
-    boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+    marginBottom: 20,
+    boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
   },
-  row: { display: "flex", gap: 12, flexWrap: "wrap" },
+  row: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" },
   smallInput: {
     flex: 1,
-    padding: "12px 14px",
-    fontSize: 15,
+    padding: "11px 13px",
+    fontSize: 14,
     borderRadius: 8,
     border: "1px solid #e0e0e0",
     outline: "none",
-    position: "relative",
     background: "transparent",
     fontFamily: "inherit",
   },
-  autofillWrapper: {
-    position: "relative",
-    flex: 1,
-  },
+  autofillWrapper: { position: "relative", flex: 1 },
   suggestion: {
     position: "absolute",
     left: 14,
-    top: 12,
-    color: "#aaa",
+    top: 11,
+    color: "#bbb",
     pointerEvents: "none",
-    fontSize: "inherit",
+    fontSize: 14,
     fontFamily: "inherit",
-    lineHeight: "inherit",
-    opacity: 0.5,
+    opacity: 0.7,
   },
   button: {
-    padding: "12px 22px",
-    fontSize: 15,
+    padding: "11px 20px",
+    fontSize: 14,
     borderRadius: 8,
     border: "none",
     background: "#111",
     color: "#fff",
     cursor: "pointer",
+    whiteSpace: "nowrap",
   },
-  tableCard: {
-    background: "#ffffff",
+
+  // ── Bill area ──
+  billArea: {
+    background: "#fff",
     borderRadius: 12,
-    padding: 20,
-    boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+    padding: "24px 28px",
+    boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
   },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 15 },
-  totalBox: {
-    marginTop: 25,
-    fontSize: 22,
+  billHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  logo: { width: 100, objectFit: "contain" },
+  billMeta: { display: "flex", flexDirection: "column", gap: 4, textAlign: "right" },
+  billMetaRow: { display: "flex", gap: 12, justifyContent: "flex-end", alignItems: "center" },
+  metaLabel: { fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, minWidth: 36 },
+  metaValue: { fontSize: 14, fontWeight: 600, color: "#111" },
+
+  divider: { border: "none", borderTop: "1.5px solid #e8e8e8", margin: "14px 0" },
+
+  // Table
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
+  theadRow: { background: "#111" },
+  th: {
+    padding: "10px 12px",
+    color: "#fff",
     fontWeight: 600,
-    textAlign: "right",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    textAlign: "left",
+    border: "1px solid #333",
   },
+  td: {
+    padding: "10px 12px",
+    color: "#222",
+    fontSize: 14,
+    border: "1px solid #e4e4e4",
+    verticalAlign: "middle",
+  },
+  trEven: { background: "#fff" },
+  trOdd: { background: "#fafafa" },
+
+  qtyControls: { display: "inline-flex", alignItems: "center", gap: 6 },
+  qtyBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    border: "1px solid #ddd",
+    background: "#f5f5f5",
+    cursor: "pointer",
+    fontSize: 14,
+    lineHeight: 1,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 0,
+  },
+  qtyNum: { minWidth: 20, textAlign: "center", fontWeight: 600 },
+  removeBtn: {
+    background: "none",
+    border: "none",
+    color: "#cc3333",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 600,
+    padding: "2px 6px",
+    borderRadius: 4,
+  },
+
+  // Totals
+  totalsBlock: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 6,
+    marginTop: 6,
+  },
+  profitRow: {
+    display: "flex",
+    gap: 48,
+    fontSize: 14,
+    color: "#666",
+  },
+  grandTotalRow: {
+    display: "flex",
+    gap: 48,
+    fontSize: 20,
+    fontWeight: 700,
+    color: "#111",
+    borderTop: "2px solid #111",
+    paddingTop: 8,
+    marginTop: 4,
+  },
+  thankYou: {
+    textAlign: "center",
+    marginTop: 28,
+    fontSize: 13,
+    color: "#aaa",
+    letterSpacing: 0.4,
+  },
+
+  // Action buttons
+  actions: { display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" },
   printBtn: {
-    marginTop: 20,
-    marginLeft: 10,
-    padding: "12px 22px",
-    fontSize: 15,
+    padding: "11px 20px",
+    fontSize: 14,
     borderRadius: 8,
     border: "none",
     background: "#111",
