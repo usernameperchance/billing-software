@@ -1,31 +1,16 @@
 @media print {
   body {
     margin: 0;
-  }
-
-  body * {
-    visibility: hidden;
-  }
-
-  /* 🔴 FIX: target both the class AND the id so print works */
-  .print-area,
-  #print-bill,
-  .print-area *,
-  #print-bill * {
-    visibility: visible;
-  }
-
-  .print-area,
-  #print-bill {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    padding: 20px;
     background: white;
   }
 
   .no-print {
     display: none !important;
+  }
+
+  #print-bill {
+    display: block;
+    width: 100%;
+    padding: 20px;
   }
 }
