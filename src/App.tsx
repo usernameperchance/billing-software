@@ -407,9 +407,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   billArea: {
     background: "#fff",
     borderRadius: 12,
-    padding: "24px 28px",
+    padding: "10px 28px 24px 28px",
     boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
   },
+
   billHeader: {
     display: "flex",
     flexDirection: "column",
@@ -417,6 +418,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: 16,
     gap: 10,
   },
+  
   logo: { width: 240, height: "auto", objectFit: "contain", display: "block", margin: "0 auto 8px auto" },
   billMeta: { display: "flex", flexDirection: "column", gap: 4, alignSelf: "flex-end", textAlign: "right" },
   billMetaRow: { display: "flex", gap: 12, justifyContent: "flex-end", alignItems: "center" },
