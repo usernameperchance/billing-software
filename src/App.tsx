@@ -171,11 +171,11 @@ export default function App() {
 
   return (
     // 🔴 FIX: outer container now properly wraps ALL content
-    <div style={styles.container}>
-      <h1 style={styles.title}>Billing Counter</h1>
+    <div className="no-print" style={styles.container}>
+      <h1 className="no-print" style={styles.title}>Billing Counter</h1>
 
-      <div style={styles.card}>
-        <div style={styles.row}>
+      <div className="no-print" style={styles.card}>
+        <div className="no-print" style={styles.row}>
           {/* ITEM AUTOFILL */}
           <div style={styles.autofillWrapper}>
             <input
@@ -191,7 +191,7 @@ export default function App() {
           </div>
 
           {/* SHADE AUTOFILL */}
-          <div style={styles.autofillWrapper}>
+          <div className="no-print" style={styles.autofillWrapper}>
             <input
               value={shade}
               onChange={(e) => setShade(e.target.value)}
@@ -210,6 +210,7 @@ export default function App() {
             value={qty}
             onChange={(e) => setQty(Number(e.target.value))}
             placeholder="qty"
+            className="no-print" 
             style={styles.smallInput}
           />
           <input
@@ -220,9 +221,10 @@ export default function App() {
               if (e.key === "Enter") addItem();
             }}
             placeholder="Price"
+            className="no-print" 
             style={styles.smallInput}
           />
-          <button style={styles.button} onClick={addItem}>
+          <button className="no-print" style={styles.button} onClick={addItem}>
             Add
           </button>
         </div>
