@@ -117,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             spreadsheetId: SPREADSHEET_ID,
             range: `'${item}'!E${rowIndex + 2}`,
             valueInputOption: "USER_ENTERED",
-            requestBody: { values: [[newStock < 2 ? "⚠️ | RESTOCK" : ""]] },
+            requestBody: { values: [[newStock < 2 ? "RESTOCK! ⚠️" : ""]] },
           });
 
           await gsapi.spreadsheets.values.update({
