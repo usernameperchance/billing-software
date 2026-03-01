@@ -25,8 +25,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const items = response.data.values?.flatMap(v => v) || [];
     res.status(200).json({ items }); // ✅ wrap in { items: [...] }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch items" });
-  }
+  } catch (err: any) {
+  console.error(err);
+  res.status(500).json({ error: err.message || "Failed to fetch items" });
+}
 }
