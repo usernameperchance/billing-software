@@ -1,7 +1,7 @@
 # Billing System
 
 A lightweight billing solution built for **Threads & More by LMS**, a physical retail store that specialises in Crochet supplies, ranging from threads, yarns, and other related accessories.
-Built with React and Typescript on the frontend, and Vercel serverless functions on the backend. Uses Google Sheets as database, which makes it highly user friendly due to the familiarity and easy accessibility; without a dedicaed database setup or technical maintenance.
+Built with React and Typescript on the frontend, and Vercel serverless functions on the backend. Uses Google Sheets as database, which makes it highly user friendly due to the familiarity and provides for easy accessibility; without a dedicated database setup or technical maintenance.
 
 ## Background
 
