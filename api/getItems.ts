@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const client = await auth.getClient();
     const gsapi = google.sheets({ version: "v4", auth: client as any});
 
-    // Registry tab items in column B
+    // registry tab items in column B
     const response = await gsapi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: "Registry!B2:B",

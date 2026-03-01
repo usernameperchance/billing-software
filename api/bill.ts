@@ -1,3 +1,4 @@
+//api/bill.ts
 import { google } from "googleapis";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -23,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const client = await auth.getClient();
     const gsapi = google.sheets({ version: "v4", auth: client as any });
 
-    // GET — return latest bill number so frontend can show next bill no
+    // GET - return latest bill number so frontend can show next bill no
     if (req.method === "GET") {
       const billSheet = await gsapi.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
@@ -36,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ billNo: lastBillNo });
     }
 
-    // POST — save bill
+    // POST - save bill
     if (req.method === "POST") {
       const { items, discountAmt = 0, discountPct = 0, finalTotal } = req.body;
 

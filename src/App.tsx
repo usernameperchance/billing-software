@@ -164,22 +164,23 @@ export default function App() {
     }
   };
 
-  const updateQty = (index: number, newQty: number) => {
+  const updateQty = (idx: number, newQty: number) => {
     if (newQty < 1) return;
     const updated = [...items];
-    updated[index].qty = newQty;
-    updated[index].total = newQty * updated[index].price;
-    updated[index].profit = (updated[index].price - updated[index].cost) * newQty;
+    updated[idx].qty = newQty;
+    updated[idx].total = newQty * updated[idx].price;
+    updated[idx].profit = (updated[idx].price - updated[idx].cost) * newQty;
     setItems(updated);
   };
 
-  const removeItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
+  const removeItem = (idx: number) => {
+    setItems(items.filter((_, i) => i !== idx));
   };
 
   return (
     <div className="app-container" style={styles.container}>
-      {/* ── INPUT AREA (no-print) ── */}
+
+      {/* ---- INPUT AREA (no-print) ---- */}
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
       <div className="no-print" style={styles.card}>
         <div style={styles.row}>
@@ -227,12 +228,12 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── BILL AREA (prints) ── */}
+      {/* ---- BILL AREA (prints) ---- */}
       <div id="print-bill" style={styles.billArea}>
 
         {/* Header */}
         <div style={styles.billHeader}>
-          <img src="/logo.svg" alt="Logo" style={styles.logo} />
+          <img src="/logo.svg" alt="logo" style={styles.logo} />
           <div style={styles.billMeta}>
             <div style={styles.billMetaRow}>
               <span style={styles.metaLabel}>Bill No</span>
@@ -319,7 +320,7 @@ export default function App() {
         <p style={styles.thankYou}>Thank you for your purchase!</p>
       </div>
 
-      {/* ── ACTION BUTTONS ── */}
+      {/* ---- ACTION BUTTONS ---- */}
       <div className="no-print" style={styles.actions}>
         <button style={styles.printBtn} onClick={() => window.print()}>🖨 Print Bill</button>
         <button
@@ -408,7 +409,7 @@ const styles: { [key: string]: React.CSSProperties } = {
 
   divider: { border: "none", borderTop: "1.5px solid #e8e8e8", margin: "14px 0" },
 
-  // Table
+  // table
   table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
   theadRow: { background: "#111" },
   th: {
@@ -458,7 +459,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: 4,
   },
 
-  // Totals
+  // totals
   totalsBlock: {
     display: "flex",
     flexDirection: "column",
