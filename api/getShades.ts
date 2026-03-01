@@ -3,10 +3,7 @@ import { google } from "googleapis";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 const auth = new google.auth.GoogleAuth({
-  credentials: {
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    client_email: process.env.GOOGLE_CLIENT_EMAIL,
-  },
+  credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT!),
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
 
