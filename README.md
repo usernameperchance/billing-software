@@ -27,10 +27,15 @@ Small retail stores often rely on manual billing, or invest highly in generic so
 
 ## Sheets Structure
 |     Tab    |                 Purpose                 |
+
 |  Registry  |               Master List               |
+
 |   <Item>   |  Per-item Tab with shades, stock, price |
+
 |   Profit   | Cost Price per item/size for profit cal |
+
 |    Bill    |              Transaction Log            |
+
 |  Discounts |        Slab based discount config       |
 
 ## Environment Variables
