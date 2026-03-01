@@ -179,7 +179,24 @@ export default function App() {
 
   return (
     <div className="app-container" style={styles.container}>
-
+      <style>{`
+  @media print {
+    .no-print { display: none !important; }
+    .print-only { display: inline !important; }
+    body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
+    .app-container {
+      background: transparent !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      max-width: 100% !important;
+    }
+    #print-bill { padding: 24px !important; }
+    #print-bill div { box-shadow: none !important; background: transparent !important; }
+    .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+`}</style>
       {/* ---- INPUT AREA (no-print) ---- */}
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
       <div className="no-print" style={styles.card}>
