@@ -22,7 +22,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .filter(row => row[0] && row[1])
       .map(row => ({
         minTotal: Number(row[0]),
-        pct: Number(row[1]),
+        maxTotal: row[1] ? Number(row[1]) : Infinity,
+        pct: Number(row[2]),
       }))
       .sort((a, b) => a.minTotal - b.minTotal);
 

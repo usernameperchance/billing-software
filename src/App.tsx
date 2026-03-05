@@ -10,7 +10,7 @@ type BillItem = {
   profit: number;
 };
 
-type Slab = { minTotal: number; pct: number };
+type Slab = { minTotal: number; maxTotal: number; pct: number };
 
 export default function App() {
   const [items, setItems] = useState<BillItem[]>([]);
@@ -131,9 +131,7 @@ export default function App() {
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
 
   const getApplicableSlab = (total: number) => {
-    return [...slabs]
-      .sort((a, b) => b.minTotal - a.minTotal)
-      .find(s => total >= s.minTotal) || null;
+    return slabs.find(s => total >= s.minTotal && total <= s.maxTotal) || null;
   };
 
   const applicableSlab = getApplicableSlab(grandTotal);
