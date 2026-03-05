@@ -492,7 +492,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: "flex",
     gap: 48,
     fontSize: 14,
-    color: "#e07000",
+    color: "#9f7448",
     fontWeight: 600,
   },
   grandTotalRow: {
