@@ -15,11 +15,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const response = await gsapi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: "Discounts!A2:B",
+      range: "Discounts!A2:C",
     });
 
     const slabs = (response.data.values || [])
-      .filter(row => row[0] && row[1])
+      .filter(row => row[0] && row[2])
       .map(row => ({
         minTotal: Number(row[0]),
         maxTotal: row[1] ? Number(row[1]) : Infinity,
