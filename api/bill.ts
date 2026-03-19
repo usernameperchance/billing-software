@@ -98,34 +98,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
         const rows = stockRes.data.values || [];
-        const rowIndex = rows.findIndex(r => r[0] === shade);
 
-        if (rowIndex !== -1) {
-          const currentStock = Number(rows[rowIndex][1]);
-          const newStock = currentStock - qty;
+        // FIX: case-insensitive + trimmed match so whitespace/casing differences don't silently skip
+        const rowIndex = rows.findIndex(
+          r => r[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
+        );
 
-          await gsapi.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `'${item}'!B${rowIndex + 2}`,
-            valueInputOption: "USER_ENTERED",
-            requestBody: { values: [[newStock]] },
-          });
-
-          await gsapi.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `'${item}'!D${rowIndex + 2}`,
-            valueInputOption: "USER_ENTERED",
-            requestBody: { values: [[`${date} ${time}`]] },
-          });
+        if (rowIndex === -1) {
+          // FIX: log when shade not found so it shows up in Vercel function logs
+          console.error(`Stock update skipped: shade "${shade}" not found in tab "${item}"`);
+          continue;
         }
+
+        const currentStock = Number(rows[rowIndex][1]);
+        const newStock = currentStock - qty;
+
+        await gsapi.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `'${item}'!B${rowIndex + 2}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[newStock]] },
+        });
+
+        await gsapi.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `'${item}'!D${rowIndex + 2}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[`${date} ${time}`]] },
+        });
       }
 
       return res.status(200).json({ success: true, billNo });
     }
 
     res.status(405).json({ error: "Method not allowed" });
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
-    res.status(500).json({ error: "Failed to process bill" });
+    res.status(500).json({ error: err.message || "Failed to process bill" });
   }
 }
