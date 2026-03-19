@@ -26,7 +26,6 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [slabs, setSlabs] = useState<Slab[]>([]);
 
-  // locked to session start, not re-render time
   const [billDate] = useState(() =>
     new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
   );
@@ -76,6 +75,12 @@ export default function App() {
   }, [item, allItems]);
 
   useEffect(() => {
+    if (shades.length === 1 && shades[0].toLowerCase() === "standard") {
+      setShade(shades[0]);
+    }
+  }, [shades]);
+
+  useEffect(() => {
     if (!item || !shade) return;
     fetch(`/api/getCost?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then(res => res.json())
@@ -96,7 +101,20 @@ export default function App() {
         }
       })
       .catch(() => setPrice(0));
-  }, [item, shade, warnedKey]);
+  }, [item, shade, shades, warnedKey]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (e.key === "Enter" && tag === "INPUT" && item && shade && price) {
+        addItem();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [item, shade, price, qty, cost, shades]);
+
+  const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
 
   const itemSuggestion =
     item && allItems.find((i) => i.toLowerCase().startsWith(item.toLowerCase()));
@@ -121,10 +139,11 @@ export default function App() {
     if (!item || !shade || !price) return;
     const total = qty * price;
     const profit = (price - cost) * qty;
-    setItems([...items, { item, shade, qty, cost, price, total, profit }]);
+    setItems(prev => [...prev, { item, shade, qty, cost, price, total, profit }]);
     setShade("");
     setQty(1);
     setPrice(0);
+    if (isStandard) setItem("");
   };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
@@ -178,23 +197,24 @@ export default function App() {
   return (
     <div className="app-container" style={styles.container}>
       <style>{`
-  @media print {
-    .no-print { display: none !important; }
-    .print-only { display: inline !important; }
-    body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
-    .app-container {
-      background: transparent !important;
-      box-shadow: none !important;
-      border-radius: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      max-width: 100% !important;
-    }
-    #print-bill { padding: 24px !important; }
-    #print-bill div { box-shadow: none !important; background: transparent !important; }
-    .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  }
-`}</style>
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: inline !important; }
+          body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
+          .app-container {
+            background: transparent !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            max-width: 100% !important;
+          }
+          #print-bill { padding: 24px !important; }
+          #print-bill div { box-shadow: none !important; background: transparent !important; }
+          .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
+
       {/* ---- INPUT AREA (no-print) ---- */}
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
       <div className="no-print" style={styles.card}>
@@ -211,18 +231,23 @@ export default function App() {
               <span style={styles.suggestion}>{itemSuggestion}</span>
             )}
           </div>
-          <div style={styles.autofillWrapper}>
-            <input
-              value={shade}
-              onChange={(e) => setShade(e.target.value)}
-              onKeyDown={handleShadeKeyDown}
-              placeholder="Shade/Variant..."
-              style={styles.smallInput}
-            />
-            {shadeSuggestion && shade !== shadeSuggestion && (
-              <span style={styles.suggestion}>{shadeSuggestion}</span>
-            )}
-          </div>
+
+          {/* FIX: hide shade input for standard items */}
+          {!isStandard && (
+            <div style={styles.autofillWrapper}>
+              <input
+                value={shade}
+                onChange={(e) => setShade(e.target.value)}
+                onKeyDown={handleShadeKeyDown}
+                placeholder="Shade/Variant..."
+                style={styles.smallInput}
+              />
+              {shadeSuggestion && shade !== shadeSuggestion && (
+                <span style={styles.suggestion}>{shadeSuggestion}</span>
+              )}
+            </div>
+          )}
+
           <input
             type="number"
             min="1"
@@ -235,7 +260,6 @@ export default function App() {
             type="number"
             value={price}
             onChange={(e) => setPrice(Number(e.target.value))}
-            onKeyDown={(e) => { if (e.key === "Enter") addItem(); }}
             placeholder="Price"
             style={{ ...styles.smallInput, maxWidth: 100 }}
           />
@@ -399,15 +423,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: "pointer",
     whiteSpace: "nowrap",
   },
-
-  // ── Bill area ──
   billArea: {
     background: "#fff",
     borderRadius: 12,
     padding: "10px 28px 24px 28px",
     boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
   },
-
   billHeader: {
     display: "flex",
     flexDirection: "column",
@@ -415,16 +436,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: 16,
     gap: 10,
   },
-  
   logo: { width: 240, height: "auto", objectFit: "contain", display: "block", margin: "0 auto 8px auto" },
   billMeta: { display: "flex", flexDirection: "column", gap: 4, alignSelf: "flex-end", textAlign: "right" },
   billMetaRow: { display: "flex", gap: 12, justifyContent: "flex-end", alignItems: "center" },
   metaLabel: { fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, minWidth: 36 },
   metaValue: { fontSize: 14, fontWeight: 600, color: "#111" },
-
   divider: { border: "none", borderTop: "1.5px solid #e8e8e8", margin: "14px 0" },
-
-  // table
   table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
   theadRow: { background: "#111" },
   th: {
@@ -446,7 +463,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   trEven: { background: "#fff" },
   trOdd: { background: "#fafafa" },
-
   qtyControls: { display: "inline-flex", alignItems: "center", gap: 6 },
   qtyBtn: {
     width: 24,
@@ -473,8 +489,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: "2px 6px",
     borderRadius: 4,
   },
-
-  // totals
   totalsBlock: {
     display: "flex",
     flexDirection: "column",
@@ -512,8 +526,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: "#aaa",
     letterSpacing: 0.4,
   },
-
-  // Action buttons
   actions: { display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" },
   printBtn: {
     padding: "11px 20px",
