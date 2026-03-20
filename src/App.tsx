@@ -155,11 +155,14 @@ export default function App() {
 
   const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
 
-  const itemFuse = useMemo(() => new Fuse(allItems, { threshold: 0.3, distance: 100 }), [allItems]);
-  const shadeFuse = useMemo(() => new Fuse(shades, { threshold: 0.3, distance: 100 }), [shades]);
+  const itemFuse = useMemo(() => new Fuse(allItems, { threshold: 0.1, distance: 100, includeScore: true }), [allItems]);
+  const shadeFuse = useMemo(() => new Fuse(shades, { threshold: 0.1, distance: 100, includeScore: true }), [shades]);
 
-  const itemSuggestion = item ? (itemFuse.search(item)[0]?.item ?? null) : null;
-  const shadeSuggestion = shade ? (shadeFuse.search(shade)[0]?.item ?? null) : null;
+  const itemResult = item ? itemFuse.search(item)[0] : null;
+  const itemSuggestion = itemResult && itemResult.score! < 0.1 ? itemResult.item : null;
+
+  const shadeResult = shade ? shadeFuse.search(shade)[0] : null;
+  const shadeSuggestion = shadeResult && shadeResult.score! < 0.1 ? shadeResult.item : null;
 
   const handleItemKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Tab" && itemSuggestion) {
