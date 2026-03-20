@@ -155,8 +155,8 @@ export default function App() {
 
   const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
 
-  const itemFuse = useMemo(() => new Fuse(allItems, { threshold: 0.1, distance: 100, includeScore: true }), [allItems]);
-  const shadeFuse = useMemo(() => new Fuse(shades, { threshold: 0.1, distance: 100, includeScore: true }), [shades]);
+  const itemFuse = useMemo(() => new Fuse(allItems, { threshold: 0.2, distance: 100, includeScore: true }), [allItems]);
+  const shadeFuse = useMemo(() => new Fuse(shades, { threshold: 0.2, distance: 100, includeScore: true }), [shades]);
 
   const itemResult = item ? itemFuse.search(item)[0] : null;
   const itemSuggestion = itemResult && itemResult.score! < 0.1 ? itemResult.item : null;
