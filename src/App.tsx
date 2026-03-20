@@ -143,7 +143,8 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (e.key === "Enter" && tag === "INPUT" && item && shade && price) {
+      // don't fire on buttons to avoid accidental triggers on +/- and save
+      if (e.key === "Enter" && tag !== "BUTTON" && item && shade && price) {
         addItem();
       }
     };
@@ -159,17 +160,19 @@ export default function App() {
     shade && shades.find((s) => s.toLowerCase().startsWith(shade.toLowerCase()));
 
   const handleItemKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === "Enter" || e.key === "Tab") && itemSuggestion) {
+    if (e.key === "Tab" && itemSuggestion) {
       e.preventDefault();
       setItem(itemSuggestion);
     }
+    // Enter falls through to global handler
   };
 
   const handleShadeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === "Enter" || e.key === "Tab") && shadeSuggestion) {
+    if (e.key === "Tab" && shadeSuggestion) {
       e.preventDefault();
       setShade(shadeSuggestion);
     }
+    // Enter falls through to global handler
   };
 
   const addItem = () => {
