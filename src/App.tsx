@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import Fuse from "fuse.js";
 
 type BillItem = {
   item: string;
@@ -154,10 +155,11 @@ export default function App() {
 
   const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
 
-  const itemSuggestion =
-    item && allItems.find((i) => i.toLowerCase().startsWith(item.toLowerCase()));
-  const shadeSuggestion =
-    shade && shades.find((s) => s.toLowerCase().startsWith(shade.toLowerCase()));
+  const itemFuse = useMemo(() => new Fuse(allItems, { threshold: 0.3, distance: 100 }), [allItems]);
+  const shadeFuse = useMemo(() => new Fuse(shades, { threshold: 0.3, distance: 100 }), [shades]);
+
+  const itemSuggestion = item ? (itemFuse.search(item)[0]?.item ?? null) : null;
+  const shadeSuggestion = shade ? (shadeFuse.search(shade)[0]?.item ?? null) : null;
 
   const handleItemKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Tab" && itemSuggestion) {
