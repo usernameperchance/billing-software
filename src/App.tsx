@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 type BillItem = {
   item: string;
@@ -26,6 +26,10 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [slabs, setSlabs] = useState<Slab[]>([]);
 
+  // caches — persist for session without triggering re-renders
+  const shadeCache = useRef<Record<string, string[]>>({});
+  const priceCache = useRef<Record<string, { price: number; qty: number }>>({});
+
   const [billDate] = useState(() =>
     new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
   );
@@ -47,10 +51,19 @@ export default function App() {
 
   useEffect(() => { fetchNextBillNo(); }, []);
 
+  // OPTIMISATION: cache items in sessionStorage so repeat visits skip the fetch
   useEffect(() => {
+    const cached = sessionStorage.getItem("allItems");
+    if (cached) {
+      setAllItems(JSON.parse(cached));
+      return;
+    }
     fetch("/api/getItems")
       .then((res) => res.json())
-      .then((data) => setAllItems(data.items || []))
+      .then((data) => {
+        setAllItems(data.items || []);
+        sessionStorage.setItem("allItems", JSON.stringify(data.items || []));
+      })
       .catch(console.error);
   }, []);
 
@@ -61,6 +74,7 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  // OPTIMISATION: cache shades per item so same item doesn't re-fetch
   useEffect(() => {
     if (!item || !allItems.includes(item)) {
       setShades([]);
@@ -68,12 +82,21 @@ export default function App() {
       setPrice(0);
       return;
     }
+    if (shadeCache.current[item]) {
+      setShades(shadeCache.current[item]);
+      return;
+    }
     fetch(`/api/getShades?item=${encodeURIComponent(item)}`)
       .then((res) => res.json())
-      .then((data) => setShades(data.shades || []))
+      .then((data) => {
+        const fetched = data.shades || [];
+        shadeCache.current[item] = fetched;
+        setShades(fetched);
+      })
       .catch(console.error);
   }, [item, allItems]);
 
+  // auto-select shade if only option is "Standard"
   useEffect(() => {
     if (shades.length === 1 && shades[0].toLowerCase() === "standard") {
       setShade(shades[0]);
@@ -88,14 +111,27 @@ export default function App() {
       .catch(() => setCost(0));
   }, [item, shade]);
 
+  // OPTIMISATION: cache price+stock per item+shade combo
   useEffect(() => {
     if (!item || !shade || !shades.includes(shade)) return;
+    const key = `${item}__${shade}`;
+    if (priceCache.current[key]) {
+      setPrice(priceCache.current[key].price);
+      const stockQty = priceCache.current[key].qty;
+      if (stockQty >= 0 && stockQty < 2 && warnedKey !== `${item}-${shade}`) {
+        window.alert("low stock for this shade. check the stock sheet for details.");
+        setWarnedKey(`${item}-${shade}`);
+      }
+      return;
+    }
     fetch(`/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then((res) => res.json())
       .then((data) => {
-        setPrice(data.price || 0);
-        const stockQty = Number(data.qty ?? -1);
-        if (stockQty >= 0 && stockQty < 2 && warnedKey !== `${item}-${shade}`) {
+        const p = data.price || 0;
+        const q = Number(data.qty ?? -1);
+        priceCache.current[key] = { price: p, qty: q };
+        setPrice(p);
+        if (q >= 0 && q < 2 && warnedKey !== `${item}-${shade}`) {
           window.alert("low stock for this shade. check the stock sheet for details.");
           setWarnedKey(`${item}-${shade}`);
         }
@@ -103,6 +139,7 @@ export default function App() {
       .catch(() => setPrice(0));
   }, [item, shade, shades, warnedKey]);
 
+  // global enter to add item from any input field
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -168,6 +205,8 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
+      // invalidate price cache after save so stock qty is fresh next fetch
+      priceCache.current = {};
       fetchNextBillNo();
       alert("Bill saved");
       setItems([]);
@@ -232,7 +271,6 @@ export default function App() {
             )}
           </div>
 
-          {/* FIX: hide shade input for standard items */}
           {!isStandard && (
             <div style={styles.autofillWrapper}>
               <input

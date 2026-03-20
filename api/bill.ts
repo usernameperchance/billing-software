@@ -89,7 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // update stock in respective item tabs
-      for (const i of items) {
+      await Promise.all(items.map(async(i) => {
         const { item, shade, qty } = i;
 
         const stockRes = await gsapi.spreadsheets.values.get({
@@ -99,15 +99,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const rows = stockRes.data.values || [];
 
-        // FIX: case-insensitive + trimmed match so whitespace/casing differences don't silently skip
+        // case-insensitive + trimmed match so whitespace/casing differences don't silently skip
         const rowIndex = rows.findIndex(
           r => r[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
         );
 
         if (rowIndex === -1) {
-          // FIX: log when shade not found so it shows up in Vercel function logs
+          // log when shade not found so it shows up in Vercel function logs
           console.error(`Stock update skipped: shade "${shade}" not found in tab "${item}"`);
-          continue;
+          return; // skip stock update if shade not found
         }
 
         const currentStock = Number(rows[rowIndex][1]);
@@ -126,7 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           valueInputOption: "USER_ENTERED",
           requestBody: { values: [[`${date} ${time}`]] },
         });
-      }
+      }));
 
       return res.status(200).json({ success: true, billNo });
     }
