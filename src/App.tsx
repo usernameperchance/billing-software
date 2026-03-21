@@ -31,6 +31,14 @@ export default function App() {
   const shadeCache = useRef<Record<string, string[]>>({});
   const priceCache = useRef<Record<string, { price: number; qty: number }>>({});
 
+  // focus refs for keyboard flow
+  const itemRef = useRef<HTMLInputElement>(null);
+  const shadeRef = useRef<HTMLInputElement>(null);
+  const qtyRef = useRef<HTMLInputElement>(null);
+  const priceRef = useRef<HTMLInputElement>(null);
+
+  const [phone, setPhone] = useState("");
+
   const [billDate] = useState(() =>
     new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
   );
@@ -143,10 +151,22 @@ export default function App() {
   // global enter to add item from any input field
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      // don't fire on buttons to avoid accidental triggers on +/- and save
-      if (e.key === "Enter" && tag !== "BUTTON" && item && shade && price) {
+      const target = e.target as HTMLInputElement;
+      if (e.key !== "Enter") return;
+
+      // qty field → move to price
+      if (target === qtyRef.current) {
+        e.preventDefault();
+        priceRef.current?.focus();
+        return;
+      }
+
+      // price field → add item if all fields filled
+      if (target === priceRef.current && item && shade && price) {
+        e.preventDefault();
         addItem();
+        setTimeout(() => itemRef.current?.focus(), 50);
+        return;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -155,8 +175,8 @@ export default function App() {
 
   const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
 
-  const itemFuse = useMemo(() => new Fuse(allItems, { threshold: 0.2, distance: 100, includeScore: true }), [allItems]);
-  const shadeFuse = useMemo(() => new Fuse(shades, { threshold: 0.2, distance: 100, includeScore: true }), [shades]);
+  const itemFuse = useMemo(() => new Fuse(allItems, { threshold: 0.1, distance: 100, includeScore: true }), [allItems]);
+  const shadeFuse = useMemo(() => new Fuse(shades, { threshold: 0.1, distance: 100, includeScore: true }), [shades]);
 
   const itemResult = item ? itemFuse.search(item)[0] : null;
   const itemSuggestion = itemResult && itemResult.score! < 0.1 ? itemResult.item : null;
@@ -165,19 +185,29 @@ export default function App() {
   const shadeSuggestion = shadeResult && shadeResult.score! < 0.1 ? shadeResult.item : null;
 
   const handleItemKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Tab" && itemSuggestion) {
+    if ((e.key === "Enter" || e.key === "Tab") && itemSuggestion && item !== itemSuggestion) {
       e.preventDefault();
       setItem(itemSuggestion);
+      setTimeout(() => {
+        if (isStandard) qtyRef.current?.focus();
+        else shadeRef.current?.focus();
+      }, 50);
+    } else if (e.key === "Enter" && item && allItems.includes(item)) {
+      e.preventDefault();
+      if (isStandard) qtyRef.current?.focus();
+      else shadeRef.current?.focus();
     }
-    // Enter falls through to global handler
   };
 
   const handleShadeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Tab" && shadeSuggestion) {
+    if ((e.key === "Enter" || e.key === "Tab") && shadeSuggestion && shade !== shadeSuggestion) {
       e.preventDefault();
       setShade(shadeSuggestion);
+      setTimeout(() => qtyRef.current?.focus(), 50);
+    } else if (e.key === "Enter" && shade && shades.includes(shade)) {
+      e.preventDefault();
+      qtyRef.current?.focus();
     }
-    // Enter falls through to global handler
   };
 
   const addItem = () => {
@@ -188,7 +218,12 @@ export default function App() {
     setShade("");
     setQty(1);
     setPrice(0);
-    if (isStandard) setItem("");
+    if (isStandard) {
+      setItem("");
+      setTimeout(() => itemRef.current?.focus(), 50);
+    } else {
+      setTimeout(() => shadeRef.current?.focus(), 50);
+    }
   };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
@@ -226,6 +261,16 @@ export default function App() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const sendWhatsApp = () => {
+    if (!phone || items.length === 0) return;
+    const lines = items.map(
+      (i, idx) => `${idx + 1}. ${i.item} (${i.shade}) x${i.qty} = ₹${i.total}`
+    ).join("%0A");
+    const discount = applicableSlab ? `%0ADiscount (${applicableSlab.pct}%): -₹${discountAmt}` : "";
+    const msg = `*Threads %26 More by LMS*%0A%0A${lines}${discount}%0A%0A*Grand Total: ₹${finalTotal}*%0ABill No: %23${nextBillNo ?? "—"} | ${billDate}`;
+    window.open(`https://wa.me/${phone.replace(/\D/g, "")}?text=${msg}`, "_blank");
   };
 
   const updateQty = (idx: number, newQty: number) => {
@@ -268,11 +313,13 @@ export default function App() {
         <div style={styles.row}>
           <div style={styles.autofillWrapper}>
             <input
+              ref={itemRef}
               value={item}
               onChange={(e) => setItem(e.target.value)}
               onKeyDown={handleItemKeyDown}
               placeholder="Item..."
               style={styles.smallInput}
+              autoFocus
             />
             {itemSuggestion && item !== itemSuggestion && (
               <span style={styles.suggestion}>{itemSuggestion}</span>
@@ -282,6 +329,7 @@ export default function App() {
           {!isStandard && (
             <div style={styles.autofillWrapper}>
               <input
+                ref={shadeRef}
                 value={shade}
                 onChange={(e) => setShade(e.target.value)}
                 onKeyDown={handleShadeKeyDown}
@@ -295,6 +343,7 @@ export default function App() {
           )}
 
           <input
+            ref={qtyRef}
             type="number"
             min="1"
             value={qty}
@@ -303,6 +352,7 @@ export default function App() {
             style={{ ...styles.smallInput, maxWidth: 80 }}
           />
           <input
+            ref={priceRef}
             type="number"
             value={price}
             onChange={(e) => setPrice(Number(e.target.value))}
@@ -407,6 +457,19 @@ export default function App() {
 
       {/* ---- ACTION BUTTONS ---- */}
       <div className="no-print" style={styles.actions}>
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Phone no. for WhatsApp..."
+          style={{ ...styles.smallInput, maxWidth: 220 }}
+        />
+        <button
+          style={{ ...styles.printBtn, background: "#25D366" }}
+          onClick={sendWhatsApp}
+          disabled={!phone || items.length === 0}
+        >
+          📲 Send Bill
+        </button>
         <button style={styles.printBtn} onClick={() => window.print()}>🖨 Print Bill</button>
         <button
           style={{ ...styles.printBtn, opacity: saving ? 0.6 : 1 }}
