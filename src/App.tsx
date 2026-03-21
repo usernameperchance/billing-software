@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Fuse from "fuse.js";
+import html2canvas from "html2canvas";
 
 type BillItem = {
   item: string;
@@ -263,14 +264,51 @@ export default function App() {
     }
   };
 
-  const sendWhatsApp = () => {
+  const sendWhatsApp = async () => {
     if (!phone || items.length === 0) return;
-    const lines = items.map(
-      (i, idx) => `${idx + 1}. ${i.item} (${i.shade}) x${i.qty} = ₹${i.total}`
-    ).join("%0A");
-    const discount = applicableSlab ? `%0ADiscount (${applicableSlab.pct}%): -₹${discountAmt}` : "";
-    const msg = `*Threads %26 More by LMS*%0A%0A${lines}${discount}%0A%0A*Grand Total: ₹${finalTotal}*%0ABill No: %23${nextBillNo ?? "—"} | ${billDate}`;
-    window.open(`https://wa.me/${phone.replace(/\D/g, "")}?text=${msg}`, "_blank");
+    const billEl = document.getElementById("print-bill");
+    if (!billEl) return;
+
+    try {
+      // temporarily hide no-print elements for clean screenshot
+      const noPrint = billEl.querySelectorAll<HTMLElement>(".no-print");
+      noPrint.forEach(el => el.style.display = "none");
+
+      const canvas = await html2canvas(billEl, {
+        scale: 2, // retina quality
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+
+      // restore hidden elements
+      noPrint.forEach(el => el.style.display = "");
+
+      // copy image to clipboard
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": blob }),
+          ]);
+          const cleaned = phone.replace(/\D/g, "");
+          window.open(`https://wa.me/${cleaned}`, "_blank");
+          alert("Bill image copied to clipboard. Paste it in WhatsApp to send.");
+        } catch {
+          // fallback: download image if clipboard fails
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `bill-${nextBillNo ?? "draft"}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+          const cleaned = phone.replace(/\D/g, "");
+          window.open(`https://wa.me/${cleaned}`, "_blank");
+        }
+      }, "image/png");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to capture bill image.");
+    }
   };
 
   const updateQty = (idx: number, newQty: number) => {
