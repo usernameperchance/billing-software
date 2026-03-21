@@ -270,38 +270,43 @@ export default function App() {
     if (!billEl) return;
 
     try {
-      // temporarily hide no-print elements for clean screenshot
+      // hide no-print elements
       const noPrint = billEl.querySelectorAll<HTMLElement>(".no-print");
       noPrint.forEach(el => el.style.display = "none");
 
+      // show print-only elements (qty numbers)
+      const printOnly = billEl.querySelectorAll<HTMLElement>(".print-only");
+      printOnly.forEach(el => el.style.display = "inline");
+
       const canvas = await html2canvas(billEl, {
-        scale: 2, // retina quality
+        scale: 2,
         backgroundColor: "#ffffff",
         useCORS: true,
+        allowTaint: true,
+        logging: false,
       });
 
-      // restore hidden elements
+      // restore everything
       noPrint.forEach(el => el.style.display = "");
+      printOnly.forEach(el => el.style.display = "none");
 
-      // copy image to clipboard
-      canvas.toBlob(async (blob) => {
+      canvas.toBlob(async (blob: Blob | null) => {
         if (!blob) return;
         try {
           await navigator.clipboard.write([
             new ClipboardItem({ "image/png": blob }),
           ]);
-          const cleaned = phone.replace(/\D/g, "");
+          const cleaned = phone.replace(/[^0-9]/g, "");
           window.open(`https://wa.me/${cleaned}`, "_blank");
-          alert("Bill image copied to clipboard. Paste it in WhatsApp to send.");
+          alert("Bill image copied. Paste in WhatsApp to send.");
         } catch {
-          // fallback: download image if clipboard fails
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
           a.download = `bill-${nextBillNo ?? "draft"}.png`;
           a.click();
           URL.revokeObjectURL(url);
-          const cleaned = phone.replace(/\D/g, "");
+          const cleaned = phone.replace(/[^0-9]/g, "");
           window.open(`https://wa.me/${cleaned}`, "_blank");
         }
       }, "image/png");
@@ -309,6 +314,11 @@ export default function App() {
       console.error(err);
       alert("Failed to capture bill image.");
     }
+  };
+
+  const saveBillAndSend = async () => {
+    await saveBill();
+    if (phone) await sendWhatsApp();
   };
 
   const updateQty = (idx: number, newQty: number) => {
@@ -406,7 +416,7 @@ export default function App() {
 
         {/* Header */}
         <div style={styles.billHeader}>
-          <img src="/logo.svg" alt="logo" style={styles.logo} />
+          <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
           <div style={styles.billMeta}>
             <div style={styles.billMetaRow}>
               <span style={styles.metaLabel}>Bill No</span>
@@ -502,7 +512,7 @@ export default function App() {
           style={{ ...styles.smallInput, maxWidth: 220 }}
         />
         <button
-          style={{ ...styles.printBtn, background: "#25D366" }}
+          style={{ ...styles.printBtn, background: "#25D366", opacity: (!phone || items.length === 0) ? 0.5 : 1 }}
           onClick={sendWhatsApp}
           disabled={!phone || items.length === 0}
         >
@@ -515,6 +525,13 @@ export default function App() {
           disabled={saving}
         >
           {saving ? "Saving..." : "💾 Save to Sheets"}
+        </button>
+        <button
+          style={{ ...styles.printBtn, background: "#0a6ed1", opacity: (saving || items.length === 0) ? 0.6 : 1 }}
+          onClick={saveBillAndSend}
+          disabled={saving || items.length === 0}
+        >
+          {saving ? "Saving..." : "💾📲 Save & Send"}
         </button>
       </div>
     </div>
