@@ -33,7 +33,6 @@ export default function App() {
   const [customerName, setCustomerName] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [pointsConfig, setPointsConfig] = useState<PointsConfig | null>(null);
-  // const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
 
@@ -247,9 +246,23 @@ export default function App() {
         return;
       }
 
+      // ── Tab — accept autofill suggestion and move focus forward ──
+      if (e.key === "Tab") {
+        if (target === itemRef.current && itemSuggestion && item !== itemSuggestion) {
+          e.preventDefault();
+          selectItem(itemSuggestion);
+          return;
+        }
+        if (target === shadeRef.current && shadeSuggestion && shade !== shadeSuggestion) {
+          e.preventDefault();
+          selectShade(shadeSuggestion);
+          return;
+        }
+      }
+
       if (e.key !== "Enter") return;
 
-      // ── Tab / Enter on item — accept autofill suggestion or confirm ──
+      // ── Enter on item — accept autofill suggestion or confirm ──
       if (target === itemRef.current) {
         if (itemSuggestion && item !== itemSuggestion) {
           e.preventDefault();
@@ -295,23 +308,8 @@ export default function App() {
       }
     };
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      // Tab on item field
-      if (e.key === "Tab" && target === itemRef.current && itemSuggestion && item !== itemSuggestion) {
-        selectItem(itemSuggestion);
-      }
-      if (e.key === "Tab" && target === shadeRef.current && shadeSuggestion && shade !== shadeSuggestion) {
-        selectShade(shadeSuggestion);
-      }
-    };
-
     window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard]);
 
   const addItem = () => {
@@ -382,7 +380,6 @@ export default function App() {
       setCustomerName("");
       setPhone("");
       setRedeemPoints(false);
-      // setPointsToRedeem(0);
     } catch (err) {
       console.error(err);
       alert("Failed to save bill");
