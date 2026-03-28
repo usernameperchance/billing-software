@@ -19,11 +19,11 @@ function getISTDateTime() {
 function generateCustomerId(rows: any[][]): string {
   const ids = rows
     .map(r => r[0]?.toString())
-    .filter(id => id?.startsWith("TM-"))
-    .map(id => Number(id.replace("TM-", "")))
+    .filter(id => id?.startsWith("LMS-"))
+    .map(id => Number(id.replace("LMS-", "")))
     .filter(n => !isNaN(n));
   const next = ids.length > 0 ? Math.max(...ids) + 1 : 1;
-  return `TM-${String(next).padStart(4, "0")}`;
+  return `LMS-${String(next).padStart(4, "0")}`;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
