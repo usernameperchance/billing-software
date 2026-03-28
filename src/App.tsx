@@ -33,15 +33,9 @@ export default function App() {
   const [customerName, setCustomerName] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [pointsConfig, setPointsConfig] = useState<PointsConfig | null>(null);
-  // const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
-
-  // dropdown state
-  const [itemDropdown, setItemDropdown] = useState<string[]>([]);
-  const [shadeDropdown, setShadeDropdown] = useState<string[]>([]);
-  const [itemDdIdx, setItemDdIdx] = useState(-1);
-  const [shadeDdIdx, setShadeDdIdx] = useState(-1);
 
   // selected bill row for arrow key navigation
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
@@ -191,34 +185,21 @@ export default function App() {
     minMatchCharLength: 1,
   }), [shades]);
 
-  // update dropdowns on input change
-  useEffect(() => {
-    if (!item) { setItemDropdown([]); setItemDdIdx(-1); return; }
-    if (allItems.includes(item)) { setItemDropdown([]); return; }
-    const results = itemFuse.search(item).slice(0, 6).map(r => r.item);
-    setItemDropdown(results);
-    setItemDdIdx(-1);
-  }, [item, allItems]);
+  const itemSuggestion = item
+    ? itemFuse.search(item)[0]?.item ?? null
+    : null;
 
-  useEffect(() => {
-    if (!shade || isStandard) { setShadeDropdown([]); setShadeDdIdx(-1); return; }
-    if (shades.includes(shade)) { setShadeDropdown([]); return; }
-    const results = shadeFuse.search(shade).slice(0, 6).map(r => r.item);
-    setShadeDropdown(results);
-    setShadeDdIdx(-1);
-  }, [shade, shades]);
+  const shadeSuggestion = shade
+    ? shadeFuse.search(shade)[0]?.item ?? null
+    : null;
 
   const selectItem = (val: string) => {
     setItem(val);
-    setItemDropdown([]);
-    setItemDdIdx(-1);
     setTimeout(() => isStandard ? qtyRef.current?.focus() : shadeRef.current?.focus(), 50);
   };
 
   const selectShade = (val: string) => {
     setShade(val);
-    setShadeDropdown([]);
-    setShadeDdIdx(-1);
     setTimeout(() => qtyRef.current?.focus(), 50);
   };
 
@@ -248,7 +229,7 @@ export default function App() {
         return;
       }
 
-      // ── Arrow Up / Down — navigate bill table rows ──
+      // ── Arrow Up / Down — navigate bill table rows (outside inputs) ──
       if (e.key === "ArrowDown" && tag !== "INPUT") {
         e.preventDefault();
         setSelectedRow(prev => (prev === null ? 0 : Math.min(prev + 1, items.length - 1)));
@@ -260,94 +241,78 @@ export default function App() {
         return;
       }
 
-      // ── Arrow Up / Down inside item dropdown ──
-      if (e.key === "ArrowDown" && target === itemRef.current && itemDropdown.length > 0) {
-        e.preventDefault();
-        setItemDdIdx(prev => Math.min(prev + 1, itemDropdown.length - 1));
-        return;
-      }
-      if (e.key === "ArrowUp" && target === itemRef.current && itemDropdown.length > 0) {
-        e.preventDefault();
-        setItemDdIdx(prev => Math.max(prev - 1, 0));
-        return;
-      }
-
-      // ── Arrow Up / Down inside shade dropdown ──
-      if (e.key === "ArrowDown" && target === shadeRef.current && shadeDropdown.length > 0) {
-        e.preventDefault();
-        setShadeDdIdx(prev => Math.min(prev + 1, shadeDropdown.length - 1));
-        return;
-      }
-      if (e.key === "ArrowUp" && target === shadeRef.current && shadeDropdown.length > 0) {
-        e.preventDefault();
-        setShadeDdIdx(prev => Math.max(prev - 1, 0));
-        return;
-      }
-
-      // ── Escape — close dropdowns / deselect row ──
+      // ── Escape — deselect row ──
       if (e.key === "Escape") {
-        setItemDropdown([]);
-        setShadeDropdown([]);
         setSelectedRow(null);
         return;
       }
 
-      // ── Enter logic ──
       if (e.key !== "Enter") return;
 
-      // item dropdown — select highlighted or first result
-      if (target === itemRef.current && itemDropdown.length > 0) {
-        e.preventDefault();
-        selectItem(itemDropdown[itemDdIdx >= 0 ? itemDdIdx : 0]);
+      // ── Tab / Enter on item — accept autofill suggestion or confirm ──
+      if (target === itemRef.current) {
+        if (itemSuggestion && item !== itemSuggestion) {
+          e.preventDefault();
+          selectItem(itemSuggestion);
+        } else if (item && allItems.includes(item)) {
+          e.preventDefault();
+          if (isStandard) qtyRef.current?.focus();
+          else shadeRef.current?.focus();
+        }
         return;
       }
 
-      // shade dropdown — select highlighted or first result
-      if (target === shadeRef.current && shadeDropdown.length > 0) {
-        e.preventDefault();
-        selectShade(shadeDropdown[shadeDdIdx >= 0 ? shadeDdIdx : 0]);
+      // ── Enter on shade — accept autofill or confirm ──
+      if (target === shadeRef.current) {
+        if (shadeSuggestion && shade !== shadeSuggestion) {
+          e.preventDefault();
+          selectShade(shadeSuggestion);
+        } else if (shade && shades.includes(shade)) {
+          e.preventDefault();
+          qtyRef.current?.focus();
+        }
         return;
       }
 
-      // item confirmed, move to shade or qty
-      if (target === itemRef.current && item && allItems.includes(item)) {
-        e.preventDefault();
-        if (isStandard) qtyRef.current?.focus();
-        else shadeRef.current?.focus();
-        return;
-      }
-
-      // shade confirmed, move to qty
-      if (target === shadeRef.current && shade && shades.includes(shade)) {
-        e.preventDefault();
-        qtyRef.current?.focus();
-        return;
-      }
-
-      // qty → move to price
+      // ── qty → price ──
       if (target === qtyRef.current) {
         e.preventDefault();
         priceRef.current?.focus();
         return;
       }
 
-      // price → add item
+      // ── price → add item ──
       if (target === priceRef.current && item && shade && price) {
         e.preventDefault();
         addItem();
         return;
       }
 
-      // global fallback — add item from anywhere except buttons
+      // ── global fallback — add from anywhere except buttons ──
       if (tag !== "BUTTON" && item && shade && price) {
         e.preventDefault();
         addItem();
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      // Tab on item field
+      if (e.key === "Tab" && target === itemRef.current && itemSuggestion && item !== itemSuggestion) {
+        selectItem(itemSuggestion);
+      }
+      if (e.key === "Tab" && target === shadeRef.current && shadeSuggestion && shade !== shadeSuggestion) {
+        selectShade(shadeSuggestion);
+      }
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [item, shade, price, qty, cost, shades, items, itemDropdown, shadeDropdown, itemDdIdx, shadeDdIdx, isStandard]);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard]);
 
   const addItem = () => {
     if (!item || !shade || !price) return;
@@ -357,8 +322,6 @@ export default function App() {
     setShade("");
     setQty(1);
     setPrice(0);
-    setItemDropdown([]);
-    setShadeDropdown([]);
     if (isStandard) {
       setItem("");
       setTimeout(() => itemRef.current?.focus(), 50);
@@ -419,7 +382,7 @@ export default function App() {
       setCustomerName("");
       setPhone("");
       setRedeemPoints(false);
-      // setPointsToRedeem(0);
+      setPointsToRedeem(0);
     } catch (err) {
       console.error(err);
       alert("Failed to save bill");
@@ -534,9 +497,7 @@ export default function App() {
           #print-bill div { box-shadow: none !important; background: transparent !important; }
           .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
-        .dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 100; max-height: 200px; overflow-y: auto; }
-        .dropdown-item { padding: 9px 14px; font-size: 14px; cursor: pointer; font-family: inherit; }
-        .dropdown-item:hover, .dropdown-item.active { background: #f4f6f8; }
+
       `}</style>
 
       {/* ---- INPUT AREA ---- */}
@@ -544,7 +505,6 @@ export default function App() {
       <div className="no-print" style={styles.card}>
         <div style={styles.row}>
 
-          {/* Item input with dropdown */}
           <div style={styles.autofillWrapper}>
             <input
               ref={itemRef}
@@ -555,22 +515,11 @@ export default function App() {
               autoFocus
               autoComplete="off"
             />
-            {itemDropdown.length > 0 && (
-              <div className="dropdown">
-                {itemDropdown.map((d, i) => (
-                  <div
-                    key={d}
-                    className={`dropdown-item${i === itemDdIdx ? " active" : ""}`}
-                    onMouseDown={() => selectItem(d)}
-                  >
-                    {d}
-                  </div>
-                ))}
-              </div>
+            {itemSuggestion && item !== itemSuggestion && (
+              <span style={styles.suggestion}>{itemSuggestion}</span>
             )}
           </div>
 
-          {/* Shade input with dropdown */}
           {!isStandard && (
             <div style={styles.autofillWrapper}>
               <input
@@ -581,18 +530,8 @@ export default function App() {
                 style={styles.smallInput}
                 autoComplete="off"
               />
-              {shadeDropdown.length > 0 && (
-                <div className="dropdown">
-                  {shadeDropdown.map((d, i) => (
-                    <div
-                      key={d}
-                      className={`dropdown-item${i === shadeDdIdx ? " active" : ""}`}
-                      onMouseDown={() => selectShade(d)}
-                    >
-                      {d}
-                    </div>
-                  ))}
-                </div>
+              {shadeSuggestion && shade !== shadeSuggestion && (
+                <span style={styles.suggestion}>{shadeSuggestion}</span>
               )}
             </div>
           )}
