@@ -33,7 +33,7 @@ export default function App() {
   const [customerName, setCustomerName] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [pointsConfig, setPointsConfig] = useState<PointsConfig | null>(null);
-  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  // const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
 
@@ -382,7 +382,7 @@ export default function App() {
       setCustomerName("");
       setPhone("");
       setRedeemPoints(false);
-      setPointsToRedeem(0);
+      // setPointsToRedeem(0);
     } catch (err) {
       console.error(err);
       alert("Failed to save bill");
