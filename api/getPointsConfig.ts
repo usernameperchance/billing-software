@@ -1,4 +1,3 @@
-// api/getShades.ts
 import { google } from "googleapis";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -11,21 +10,26 @@ const SPREADSHEET_ID = process.env.SHEET_ID!;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const { item } = req.query;
-    if (!item) return res.status(400).json({ error: "Missing item" });
-
     const client = await auth.getClient();
     const gsapi = google.sheets({ version: "v4", auth: client as any });
 
     const response = await gsapi.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `'${item}'!A2:A`,
+      range: "PointsConfig!A2:C2", // single config row: EarnRate | RedeemRate | MinRedeem
     });
 
-    const shades = response.data.values?.flatMap(v => v) || [];
-    res.status(200).json({ shades });
-  } catch (err) {
+    const row = response.data.values?.[0];
+    if (!row) return res.status(200).json({ config: null }); // dormant if empty
+
+    return res.status(200).json({
+      config: {
+        earnRate: Number(row[0] || 0),   // points per amt spent
+        redeemRate: Number(row[1] || 0), // rupee value per point
+        minRedeem: Number(row[2] || 0),  // minimum points to redeem
+      },
+    });
+  } catch (err: any) {
     console.error(err);
-    res.status(500).json({ error: "Failed to fetch shades" });
+    res.status(500).json({ error: err.message || "Failed to fetch points config" });
   }
 }

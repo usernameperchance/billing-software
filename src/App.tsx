@@ -13,6 +13,8 @@ type BillItem = {
 };
 
 type Slab = { minTotal: number; maxTotal: number; pct: number };
+type Customer = { customerId: string; name: string; phone: string; points: number; totalSpend: number; totalBills: number };
+type PointsConfig = { earnRate: number; redeemRate: number; minRedeem: number };
 
 export default function App() {
   const [items, setItems] = useState<BillItem[]>([]);
@@ -27,18 +29,32 @@ export default function App() {
   const [nextBillNo, setNextBillNo] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [slabs, setSlabs] = useState<Slab[]>([]);
+  const [phone, setPhone] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [pointsConfig, setPointsConfig] = useState<PointsConfig | null>(null);
+  // const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [redeemPoints, setRedeemPoints] = useState(false);
+  const [fetchingCustomer, setFetchingCustomer] = useState(false);
 
-  // caches — persist for session without triggering re-renders
+  // dropdown state
+  const [itemDropdown, setItemDropdown] = useState<string[]>([]);
+  const [shadeDropdown, setShadeDropdown] = useState<string[]>([]);
+  const [itemDdIdx, setItemDdIdx] = useState(-1);
+  const [shadeDdIdx, setShadeDdIdx] = useState(-1);
+
+  // selected bill row for arrow key navigation
+  const [selectedRow, setSelectedRow] = useState<number | null>(null);
+
+  // caches
   const shadeCache = useRef<Record<string, string[]>>({});
   const priceCache = useRef<Record<string, { price: number; qty: number }>>({});
 
-  // focus refs for keyboard flow
+  // focus refs
   const itemRef = useRef<HTMLInputElement>(null);
   const shadeRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
-
-  const [phone, setPhone] = useState("");
 
   const [billDate] = useState(() =>
     new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
@@ -59,18 +75,26 @@ export default function App() {
       .catch(() => setNextBillNo(1));
   };
 
+  const lookupCustomer = async (ph: string) => {
+    if (ph.replace(/[^0-9]/g, "").length < 10) { setCustomer(null); return; }
+    setFetchingCustomer(true);
+    try {
+      const res = await fetch(`/api/getCustomer?phone=${encodeURIComponent(ph.trim())}`);
+      const data = await res.json();
+      setCustomer(data.customer || null);
+      if (data.customer?.name) setCustomerName(data.customer.name);
+    } catch { setCustomer(null); }
+    finally { setFetchingCustomer(false); }
+  };
+
   useEffect(() => { fetchNextBillNo(); }, []);
 
-  // OPTIMISATION: cache items in sessionStorage so repeat visits skip the fetch
   useEffect(() => {
     const cached = sessionStorage.getItem("allItems");
-    if (cached) {
-      setAllItems(JSON.parse(cached));
-      return;
-    }
+    if (cached) { setAllItems(JSON.parse(cached)); return; }
     fetch("/api/getItems")
-      .then((res) => res.json())
-      .then((data) => {
+      .then(res => res.json())
+      .then(data => {
         setAllItems(data.items || []);
         sessionStorage.setItem("allItems", JSON.stringify(data.items || []));
       })
@@ -84,7 +108,13 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // OPTIMISATION: cache shades per item so same item doesn't re-fetch
+  useEffect(() => {
+    fetch("/api/getPointsConfig")
+      .then(res => res.json())
+      .then(data => setPointsConfig(data.config || null))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!item || !allItems.includes(item)) {
       setShades([]);
@@ -92,13 +122,10 @@ export default function App() {
       setPrice(0);
       return;
     }
-    if (shadeCache.current[item]) {
-      setShades(shadeCache.current[item]);
-      return;
-    }
+    if (shadeCache.current[item]) { setShades(shadeCache.current[item]); return; }
     fetch(`/api/getShades?item=${encodeURIComponent(item)}`)
-      .then((res) => res.json())
-      .then((data) => {
+      .then(res => res.json())
+      .then(data => {
         const fetched = data.shades || [];
         shadeCache.current[item] = fetched;
         setShades(fetched);
@@ -106,7 +133,6 @@ export default function App() {
       .catch(console.error);
   }, [item, allItems]);
 
-  // auto-select shade if only option is "Standard"
   useEffect(() => {
     if (shades.length === 1 && shades[0].toLowerCase() === "standard") {
       setShade(shades[0]);
@@ -121,22 +147,21 @@ export default function App() {
       .catch(() => setCost(0));
   }, [item, shade]);
 
-  // OPTIMISATION: cache price+stock per item+shade combo
   useEffect(() => {
     if (!item || !shade || !shades.includes(shade)) return;
     const key = `${item}__${shade}`;
     if (priceCache.current[key]) {
       setPrice(priceCache.current[key].price);
-      const stockQty = priceCache.current[key].qty;
-      if (stockQty >= 0 && stockQty < 2 && warnedKey !== `${item}-${shade}`) {
+      const sq = priceCache.current[key].qty;
+      if (sq >= 0 && sq < 2 && warnedKey !== `${item}-${shade}`) {
         window.alert("low stock for this shade. check the stock sheet for details.");
         setWarnedKey(`${item}-${shade}`);
       }
       return;
     }
     fetch(`/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
-      .then((res) => res.json())
-      .then((data) => {
+      .then(res => res.json())
+      .then(data => {
         const p = data.price || 0;
         const q = Number(data.qty ?? -1);
         priceCache.current[key] = { price: p, qty: q };
@@ -149,67 +174,180 @@ export default function App() {
       .catch(() => setPrice(0));
   }, [item, shade, shades, warnedKey]);
 
-  // global enter to add item from any input field
+  const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
+
+  // Fuse instances — lenient threshold so partial/middle matches work
+  const itemFuse = useMemo(() => new Fuse(allItems, {
+    threshold: 0.4,
+    distance: 100,
+    includeScore: true,
+    minMatchCharLength: 1,
+  }), [allItems]);
+
+  const shadeFuse = useMemo(() => new Fuse(shades, {
+    threshold: 0.4,
+    distance: 100,
+    includeScore: true,
+    minMatchCharLength: 1,
+  }), [shades]);
+
+  // update dropdowns on input change
   useEffect(() => {
+    if (!item) { setItemDropdown([]); setItemDdIdx(-1); return; }
+    if (allItems.includes(item)) { setItemDropdown([]); return; }
+    const results = itemFuse.search(item).slice(0, 6).map(r => r.item);
+    setItemDropdown(results);
+    setItemDdIdx(-1);
+  }, [item, allItems]);
+
+  useEffect(() => {
+    if (!shade || isStandard) { setShadeDropdown([]); setShadeDdIdx(-1); return; }
+    if (shades.includes(shade)) { setShadeDropdown([]); return; }
+    const results = shadeFuse.search(shade).slice(0, 6).map(r => r.item);
+    setShadeDropdown(results);
+    setShadeDdIdx(-1);
+  }, [shade, shades]);
+
+  const selectItem = (val: string) => {
+    setItem(val);
+    setItemDropdown([]);
+    setItemDdIdx(-1);
+    setTimeout(() => isStandard ? qtyRef.current?.focus() : shadeRef.current?.focus(), 50);
+  };
+
+  const selectShade = (val: string) => {
+    setShade(val);
+    setShadeDropdown([]);
+    setShadeDdIdx(-1);
+    setTimeout(() => qtyRef.current?.focus(), 50);
+  };
+
+  // global keyboard controller
+  useEffect(() => {
+    const fields = [itemRef, shadeRef, qtyRef, priceRef];
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLInputElement;
+      const target = e.target as HTMLElement;
+      const tag = target.tagName;
+
+      // ── Arrow Right / Left — move between input fields ──
+      if (e.key === "ArrowRight" && tag === "INPUT") {
+        const idx = fields.findIndex(r => r.current === target);
+        if (idx !== -1 && idx < fields.length - 1) {
+          e.preventDefault();
+          fields[idx + 1].current?.focus();
+        }
+        return;
+      }
+      if (e.key === "ArrowLeft" && tag === "INPUT") {
+        const idx = fields.findIndex(r => r.current === target);
+        if (idx > 0) {
+          e.preventDefault();
+          fields[idx - 1].current?.focus();
+        }
+        return;
+      }
+
+      // ── Arrow Up / Down — navigate bill table rows ──
+      if (e.key === "ArrowDown" && tag !== "INPUT") {
+        e.preventDefault();
+        setSelectedRow(prev => (prev === null ? 0 : Math.min(prev + 1, items.length - 1)));
+        return;
+      }
+      if (e.key === "ArrowUp" && tag !== "INPUT") {
+        e.preventDefault();
+        setSelectedRow(prev => (prev === null ? 0 : Math.max(prev - 1, 0)));
+        return;
+      }
+
+      // ── Arrow Up / Down inside item dropdown ──
+      if (e.key === "ArrowDown" && target === itemRef.current && itemDropdown.length > 0) {
+        e.preventDefault();
+        setItemDdIdx(prev => Math.min(prev + 1, itemDropdown.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp" && target === itemRef.current && itemDropdown.length > 0) {
+        e.preventDefault();
+        setItemDdIdx(prev => Math.max(prev - 1, 0));
+        return;
+      }
+
+      // ── Arrow Up / Down inside shade dropdown ──
+      if (e.key === "ArrowDown" && target === shadeRef.current && shadeDropdown.length > 0) {
+        e.preventDefault();
+        setShadeDdIdx(prev => Math.min(prev + 1, shadeDropdown.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp" && target === shadeRef.current && shadeDropdown.length > 0) {
+        e.preventDefault();
+        setShadeDdIdx(prev => Math.max(prev - 1, 0));
+        return;
+      }
+
+      // ── Escape — close dropdowns / deselect row ──
+      if (e.key === "Escape") {
+        setItemDropdown([]);
+        setShadeDropdown([]);
+        setSelectedRow(null);
+        return;
+      }
+
+      // ── Enter logic ──
       if (e.key !== "Enter") return;
 
-      // qty field → move to price
+      // item dropdown — select highlighted or first result
+      if (target === itemRef.current && itemDropdown.length > 0) {
+        e.preventDefault();
+        selectItem(itemDropdown[itemDdIdx >= 0 ? itemDdIdx : 0]);
+        return;
+      }
+
+      // shade dropdown — select highlighted or first result
+      if (target === shadeRef.current && shadeDropdown.length > 0) {
+        e.preventDefault();
+        selectShade(shadeDropdown[shadeDdIdx >= 0 ? shadeDdIdx : 0]);
+        return;
+      }
+
+      // item confirmed, move to shade or qty
+      if (target === itemRef.current && item && allItems.includes(item)) {
+        e.preventDefault();
+        if (isStandard) qtyRef.current?.focus();
+        else shadeRef.current?.focus();
+        return;
+      }
+
+      // shade confirmed, move to qty
+      if (target === shadeRef.current && shade && shades.includes(shade)) {
+        e.preventDefault();
+        qtyRef.current?.focus();
+        return;
+      }
+
+      // qty → move to price
       if (target === qtyRef.current) {
         e.preventDefault();
         priceRef.current?.focus();
         return;
       }
 
-      // price field → add item if all fields filled
+      // price → add item
       if (target === priceRef.current && item && shade && price) {
         e.preventDefault();
         addItem();
-        setTimeout(() => itemRef.current?.focus(), 50);
         return;
       }
+
+      // global fallback — add item from anywhere except buttons
+      if (tag !== "BUTTON" && item && shade && price) {
+        e.preventDefault();
+        addItem();
+      }
     };
+
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [item, shade, price, qty, cost, shades]);
-
-  const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
-
-  const itemFuse = useMemo(() => new Fuse(allItems, { threshold: 0.1, distance: 100, includeScore: true }), [allItems]);
-  const shadeFuse = useMemo(() => new Fuse(shades, { threshold: 0.1, distance: 100, includeScore: true }), [shades]);
-
-  const itemResult = item ? itemFuse.search(item)[0] : null;
-  const itemSuggestion = itemResult && itemResult.score! < 0.1 ? itemResult.item : null;
-
-  const shadeResult = shade ? shadeFuse.search(shade)[0] : null;
-  const shadeSuggestion = shadeResult && shadeResult.score! < 0.1 ? shadeResult.item : null;
-
-  const handleItemKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === "Enter" || e.key === "Tab") && itemSuggestion && item !== itemSuggestion) {
-      e.preventDefault();
-      setItem(itemSuggestion);
-      setTimeout(() => {
-        if (isStandard) qtyRef.current?.focus();
-        else shadeRef.current?.focus();
-      }, 50);
-    } else if (e.key === "Enter" && item && allItems.includes(item)) {
-      e.preventDefault();
-      if (isStandard) qtyRef.current?.focus();
-      else shadeRef.current?.focus();
-    }
-  };
-
-  const handleShadeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === "Enter" || e.key === "Tab") && shadeSuggestion && shade !== shadeSuggestion) {
-      e.preventDefault();
-      setShade(shadeSuggestion);
-      setTimeout(() => qtyRef.current?.focus(), 50);
-    } else if (e.key === "Enter" && shade && shades.includes(shade)) {
-      e.preventDefault();
-      qtyRef.current?.focus();
-    }
-  };
+  }, [item, shade, price, qty, cost, shades, items, itemDropdown, shadeDropdown, itemDdIdx, shadeDdIdx, isStandard]);
 
   const addItem = () => {
     if (!item || !shade || !price) return;
@@ -219,6 +357,8 @@ export default function App() {
     setShade("");
     setQty(1);
     setPrice(0);
+    setItemDropdown([]);
+    setShadeDropdown([]);
     if (isStandard) {
       setItem("");
       setTimeout(() => itemRef.current?.focus(), 50);
@@ -230,12 +370,22 @@ export default function App() {
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
 
-  const getApplicableSlab = (total: number) => {
-    return slabs.find(s => total >= s.minTotal && total <= s.maxTotal) || null;
-  };
+  const getApplicableSlab = (total: number) =>
+    slabs.find(s => total >= s.minTotal && total <= s.maxTotal) || null;
 
   const applicableSlab = getApplicableSlab(grandTotal);
-  const discountAmt = applicableSlab ? Math.round(grandTotal * applicableSlab.pct / 100) : 0;
+  const slabDiscount = applicableSlab ? Math.round(grandTotal * applicableSlab.pct / 100) : 0;
+
+  // points redemption value — only if toggled on, config exists, customer has enough points
+  const pointsDiscount = (() => {
+    if (!redeemPoints || !pointsConfig || !customer) return 0;
+    if (customer.points < pointsConfig.minRedeem) return 0;
+    return Math.floor(customer.points * pointsConfig.redeemRate);
+  })();
+
+  // points take priority — if redeeming, slab discount is skipped
+  const discountAmt = pointsDiscount > 0 ? pointsDiscount : slabDiscount;
+  const discountPct = pointsDiscount > 0 ? 0 : (applicableSlab?.pct ?? 0);
   const finalTotal = grandTotal - discountAmt;
 
   const saveBill = async () => {
@@ -245,17 +395,31 @@ export default function App() {
       const res = await fetch("/api/bill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, discountAmt, discountPct: applicableSlab?.pct ?? 0, finalTotal }),
+        body: JSON.stringify({
+          items,
+          discountAmt,
+          discountPct,
+          finalTotal,
+          pointsRedeemed: pointsDiscount,
+          customer: phone ? { name: customerName, phone } : null,
+          earnRate: pointsConfig?.earnRate ?? 0,
+          redeemRate: pointsConfig?.redeemRate ?? 0,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
-      // invalidate price cache after save so stock qty is fresh next fetch
       priceCache.current = {};
       fetchNextBillNo();
       alert("Bill saved");
       setItems([]);
       setItem("");
       setShade("");
+      setSelectedRow(null);
+      setCustomer(null);
+      setCustomerName("");
+      setPhone("");
+      setRedeemPoints(false);
+      // setPointsToRedeem(0);
     } catch (err) {
       console.error(err);
       alert("Failed to save bill");
@@ -264,38 +428,54 @@ export default function App() {
     }
   };
 
+  const svgToPngDataUrl = (svgUrl: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth || 480;
+        c.height = img.naturalHeight || 240;
+        const ctx = c.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        resolve(c.toDataURL("image/png"));
+      };
+      img.onerror = reject;
+      img.src = svgUrl;
+    });
+  };
+
   const sendWhatsApp = async () => {
     if (!phone || items.length === 0) return;
     const billEl = document.getElementById("print-bill");
     if (!billEl) return;
-
     try {
-      // hide no-print elements
+      const logoEl = billEl.querySelector<HTMLImageElement>("img[alt='logo']");
+      const originalSrc = logoEl?.src ?? "";
+      if (logoEl) {
+        try {
+          const pngUrl = await svgToPngDataUrl("/logo.svg");
+          logoEl.src = pngUrl;
+          await new Promise(r => setTimeout(r, 100));
+        } catch { /* continue anyway */ }
+      }
       const noPrint = billEl.querySelectorAll<HTMLElement>(".no-print");
       noPrint.forEach(el => el.style.display = "none");
-
-      // show print-only elements (qty numbers)
       const printOnly = billEl.querySelectorAll<HTMLElement>(".print-only");
       printOnly.forEach(el => el.style.display = "inline");
 
       const canvas = await html2canvas(billEl, {
-        scale: 2,
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
+        scale: 2, backgroundColor: "#ffffff", useCORS: true, allowTaint: true, logging: false,
       });
 
-      // restore everything
       noPrint.forEach(el => el.style.display = "");
       printOnly.forEach(el => el.style.display = "none");
+      if (logoEl) logoEl.src = originalSrc;
 
       canvas.toBlob(async (blob: Blob | null) => {
         if (!blob) return;
         try {
-          await navigator.clipboard.write([
-            new ClipboardItem({ "image/png": blob }),
-          ]);
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
           const cleaned = phone.replace(/[^0-9]/g, "");
           window.open(`https://wa.me/${cleaned}`, "_blank");
           alert("Bill image copied. Paste in WhatsApp to send.");
@@ -332,6 +512,7 @@ export default function App() {
 
   const removeItem = (idx: number) => {
     setItems(items.filter((_, i) => i !== idx));
+    setSelectedRow(null);
   };
 
   return (
@@ -353,39 +534,65 @@ export default function App() {
           #print-bill div { box-shadow: none !important; background: transparent !important; }
           .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
+        .dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 100; max-height: 200px; overflow-y: auto; }
+        .dropdown-item { padding: 9px 14px; font-size: 14px; cursor: pointer; font-family: inherit; }
+        .dropdown-item:hover, .dropdown-item.active { background: #f4f6f8; }
       `}</style>
 
-      {/* ---- INPUT AREA (no-print) ---- */}
+      {/* ---- INPUT AREA ---- */}
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
       <div className="no-print" style={styles.card}>
         <div style={styles.row}>
+
+          {/* Item input with dropdown */}
           <div style={styles.autofillWrapper}>
             <input
               ref={itemRef}
               value={item}
               onChange={(e) => setItem(e.target.value)}
-              onKeyDown={handleItemKeyDown}
               placeholder="Item..."
               style={styles.smallInput}
               autoFocus
+              autoComplete="off"
             />
-            {itemSuggestion && item !== itemSuggestion && (
-              <span style={styles.suggestion}>{itemSuggestion}</span>
+            {itemDropdown.length > 0 && (
+              <div className="dropdown">
+                {itemDropdown.map((d, i) => (
+                  <div
+                    key={d}
+                    className={`dropdown-item${i === itemDdIdx ? " active" : ""}`}
+                    onMouseDown={() => selectItem(d)}
+                  >
+                    {d}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
+          {/* Shade input with dropdown */}
           {!isStandard && (
             <div style={styles.autofillWrapper}>
               <input
                 ref={shadeRef}
                 value={shade}
                 onChange={(e) => setShade(e.target.value)}
-                onKeyDown={handleShadeKeyDown}
                 placeholder="Shade/Variant..."
                 style={styles.smallInput}
+                autoComplete="off"
               />
-              {shadeSuggestion && shade !== shadeSuggestion && (
-                <span style={styles.suggestion}>{shadeSuggestion}</span>
+              {shadeDropdown.length > 0 && (
+                <div className="dropdown">
+                  {shadeDropdown.map((d, i) => (
+                    <div
+                      key={d}
+                      className={`dropdown-item${i === shadeDdIdx ? " active" : ""}`}
+                      onMouseDown={() => selectShade(d)}
+                    >
+                      {d}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -411,10 +618,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* ---- BILL AREA (prints) ---- */}
+      {/* ---- BILL AREA ---- */}
       <div id="print-bill" style={styles.billArea}>
-
-        {/* Header */}
         <div style={styles.billHeader}>
           <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
           <div style={styles.billMeta}>
@@ -435,7 +640,6 @@ export default function App() {
 
         <hr style={styles.divider} />
 
-        {/* Table */}
         <table className="bill-table" style={styles.table}>
           <thead>
             <tr style={styles.theadRow}>
@@ -457,22 +661,30 @@ export default function App() {
               </tr>
             ) : (
               items.map((i, idx) => (
-                <tr key={idx} style={idx % 2 === 0 ? styles.trEven : styles.trOdd}>
+                <tr
+                  key={idx}
+                  style={{
+                    ...(idx % 2 === 0 ? styles.trEven : styles.trOdd),
+                    outline: selectedRow === idx ? "2px solid #111" : "none",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setSelectedRow(idx)}
+                >
                   <td style={{ ...styles.td, textAlign: "center", color: "#999", fontSize: 13 }}>{idx + 1}</td>
                   <td style={styles.td}>{i.item}</td>
                   <td style={styles.td}>{i.shade}</td>
                   <td style={{ ...styles.td, textAlign: "center" }}>
                     <span className="no-print" style={styles.qtyControls}>
-                      <button style={styles.qtyBtn} onClick={() => updateQty(idx, i.qty - 1)}>−</button>
+                      <button style={styles.qtyBtn} onClick={(e) => { e.stopPropagation(); updateQty(idx, i.qty - 1); }}>−</button>
                       <span style={styles.qtyNum}>{i.qty}</span>
-                      <button style={styles.qtyBtn} onClick={() => updateQty(idx, i.qty + 1)}>+</button>
+                      <button style={styles.qtyBtn} onClick={(e) => { e.stopPropagation(); updateQty(idx, i.qty + 1); }}>+</button>
                     </span>
                     <span className="print-only" style={{ display: "none" }}>{i.qty}</span>
                   </td>
                   <td style={{ ...styles.td, textAlign: "right" }}>₹{i.price}</td>
                   <td style={{ ...styles.td, textAlign: "right", fontWeight: 600 }}>₹{i.total}</td>
                   <td className="no-print" style={{ ...styles.td, textAlign: "center" }}>
-                    <button style={styles.removeBtn} onClick={() => removeItem(idx)}>✕</button>
+                    <button style={styles.removeBtn} onClick={(e) => { e.stopPropagation(); removeItem(idx); }}>✕</button>
                   </td>
                 </tr>
               ))
@@ -482,15 +694,18 @@ export default function App() {
 
         <hr style={styles.divider} />
 
-        {/* Totals */}
         <div style={styles.totalsBlock}>
           <div className="no-print" style={styles.profitRow}>
             <span>Net Profit</span>
             <span>₹{grandProfit}</span>
           </div>
-          {applicableSlab && (
+          {discountAmt > 0 && (
             <div style={styles.discountRow}>
-              <span>Discount ({applicableSlab.pct}%)</span>
+              <span>
+                {pointsDiscount > 0
+                  ? `Points Redeemed`
+                  : `Discount (${applicableSlab?.pct}%)`}
+              </span>
               <span>− ₹{discountAmt}</span>
             </div>
           )}
@@ -503,13 +718,61 @@ export default function App() {
         <p style={styles.thankYou}>Thank you for your purchase!</p>
       </div>
 
+      {/* ---- CUSTOMER SECTION ---- */}
+      <div className="no-print" style={styles.customerCard}>
+        <div style={styles.row}>
+          <input
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            placeholder="Customer Name..."
+            style={styles.smallInput}
+          />
+          <input
+            value={phone}
+            onChange={(e) => {
+              setPhone(e.target.value);
+              lookupCustomer(e.target.value);
+            }}
+            placeholder="Phone (10 digits)..."
+            style={styles.smallInput}
+          />
+          {fetchingCustomer && <span style={{ fontSize: 13, color: "#888" }}>Looking up...</span>}
+        </div>
+        {customer && (
+          <div style={styles.customerInfo}>
+            <span>👤 {customer.name} — {customer.points} pts</span>
+            {pointsConfig && customer.points >= pointsConfig.minRedeem && (
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={redeemPoints}
+                  onChange={(e) => setRedeemPoints(e.target.checked)}
+                />
+                Redeem {customer.points} pts (₹{Math.floor(customer.points * pointsConfig.redeemRate)} off)
+              </label>
+            )}
+            {pointsConfig && customer.points < pointsConfig.minRedeem && (
+              <span style={{ fontSize: 12, color: "#aaa" }}>
+                {pointsConfig.minRedeem - customer.points} more pts needed to redeem
+              </span>
+            )}
+          </div>
+        )}
+        {!customer && phone.replace(/[^0-9]/g, "").length >= 10 && !fetchingCustomer && (
+          <div style={{ fontSize: 13, color: "#888", marginTop: 6 }}>New customer — will be registered on save</div>
+        )}
+      </div>
+
       {/* ---- ACTION BUTTONS ---- */}
       <div className="no-print" style={styles.actions}>
         <input
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
+          onChange={(e) => {
+            setPhone(e.target.value);
+            lookupCustomer(e.target.value);
+          }}
           placeholder="Phone no. for WhatsApp..."
-          style={{ ...styles.smallInput, maxWidth: 220 }}
+          style={{ ...styles.smallInput, maxWidth: 220, display: "none" }}
         />
         <button
           style={{ ...styles.printBtn, background: "#25D366", opacity: (!phone || items.length === 0) ? 0.5 : 1 }}
@@ -660,19 +923,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: 6,
     marginTop: 6,
   },
-  profitRow: {
-    display: "flex",
-    gap: 48,
-    fontSize: 14,
-    color: "#666",
-  },
-  discountRow: {
-    display: "flex",
-    gap: 48,
-    fontSize: 14,
-    color: "#9f7448",
-    fontWeight: 600,
-  },
+  profitRow: { display: "flex", gap: 48, fontSize: 14, color: "#666" },
+  discountRow: { display: "flex", gap: 48, fontSize: 14, color: "#9f7448", fontWeight: 600 },
   grandTotalRow: {
     display: "flex",
     gap: 48,
@@ -683,12 +935,21 @@ const styles: { [key: string]: React.CSSProperties } = {
     paddingTop: 8,
     marginTop: 4,
   },
-  thankYou: {
-    textAlign: "center",
-    marginTop: 28,
-    fontSize: 13,
-    color: "#aaa",
-    letterSpacing: 0.4,
+  thankYou: { textAlign: "center", marginTop: 28, fontSize: 13, color: "#aaa", letterSpacing: 0.4 },
+  customerCard: {
+    background: "#fff",
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+    boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
+  },
+  customerInfo: {
+    display: "flex",
+    alignItems: "center",
+    gap: 20,
+    marginTop: 10,
+    fontSize: 14,
+    color: "#333",
   },
   actions: { display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" },
   printBtn: {
