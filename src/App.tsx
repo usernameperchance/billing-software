@@ -147,7 +147,7 @@ export default function App() {
       setPrice(priceCache.current[key].price);
       const sq = priceCache.current[key].qty;
       if (sq >= 0 && sq < 2 && warnedKey !== `${item}-${shade}`) {
-        window.alert("low stock for this shade. check the stock sheet for details.");
+        window.alert("low stock for this shade. check the stock sheet for details."); //wa.me handling to send low stock whatsapp at end of day
         setWarnedKey(`${item}-${shade}`);
       }
       return;
