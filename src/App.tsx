@@ -631,7 +631,7 @@ const confirmTransfer = async () => {
     setRestockPlan(null);
 
     // Send WhatsApp
-    const cleaned = "PHONE_NUMBER_HERE".replace(/[^0-9]/g, ""); // Replace
+    const cleaned = "+919820467786".replace(/[^0-9]/g, ""); // Replace
     window.open(
       `https://wa.me/${cleaned}?text=${encodeURIComponent(restockPlan.message)}`,
       "_blank"
