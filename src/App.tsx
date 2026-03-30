@@ -36,11 +36,6 @@ export default function App() {
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
 
-  // misc mode
-  const [miscMode, setMiscMode] = useState(false);
-  const [miscItem, setMiscItem] = useState("");
-  const [miscShade, setMiscShade] = useState("");
-
   // restock
   const [restockLoading, setRestockLoading] = useState(false);
 
@@ -56,8 +51,6 @@ export default function App() {
   const shadeRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
-  const miscItemRef = useRef<HTMLInputElement>(null);
-  const miscShadeRef = useRef<HTMLInputElement>(null);
 
   const [billDate] = useState(() =>
     new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
@@ -127,11 +120,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (miscMode) return;
-    if (!item || !allItems.includes(item)) {
+    if (!item) {
       setShades([]);
       setShade("");
       setPrice(0);
+      setCost(0);
+      return;
+    }
+    // Only fetch shades if item exists in registry
+    if (!allItems.includes(item)) {
+      setShades([]);
       return;
     }
     if (shadeCache.current[item]) { setShades(shadeCache.current[item]); return; }
@@ -143,27 +141,28 @@ export default function App() {
         setShades(fetched);
       })
       .catch(console.error);
-  }, [item, allItems, miscMode]);
+  }, [item, allItems]);
 
   useEffect(() => {
-    if (miscMode) return;
     if (shades.length === 1 && shades[0].toLowerCase() === "standard") {
       setShade(shades[0]);
     }
-  }, [shades, miscMode]);
+  }, [shades]);
 
   useEffect(() => {
-    if (miscMode) return;
     if (!item || !shade) return;
+    // Only fetch cost if item exists
+    if (!allItems.includes(item)) return;
     fetch(`/api/getCost?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then(res => res.json())
       .then(data => setCost(data.cost || 0))
       .catch(() => setCost(0));
-  }, [item, shade, miscMode]);
+  }, [item, shade, allItems]);
 
   useEffect(() => {
-    if (miscMode) return;
-    if (!item || !shade || !shades.includes(shade)) return;
+    if (!item || !shade) return;
+    // Only fetch price if item and shade exist in system
+    if (!allItems.includes(item) || !shades.includes(shade)) return;
     const key = `${item}__${shade}`;
     if (priceCache.current[key]) {
       setPrice(priceCache.current[key].price);
@@ -187,9 +186,9 @@ export default function App() {
         }
       })
       .catch(() => setPrice(0));
-  }, [item, shade, shades, warnedKey, miscMode]);
+  }, [item, shade, shades, warnedKey, allItems]);
 
-  const isStandard = !miscMode && shades.length === 1 && shades[0].toLowerCase() === "standard";
+  const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
 
   // Fuse instances
   const itemFuse = useMemo(() => new Fuse(allItems, {
@@ -206,16 +205,16 @@ export default function App() {
     minMatchCharLength: 1,
   }), [shades]);
 
-  const itemSuggestion = (!miscMode && item)
+  const itemSuggestion = item
     ? itemFuse.search(item)[0]?.item ?? null
     : null;
 
-  // shade suggestion — suppress ghost text for pure-number shades
-  const shadeSuggestionRaw = (!miscMode && shade)
+  // shade suggestion — only suppress pure numbers (e.g. "101"), allow "101 Red"
+  const shadeSuggestionRaw = shade
     ? shadeFuse.search(shade)[0]?.item ?? null
     : null;
 
-  const shadeSuggestion = shadeSuggestionRaw && /[a-zA-Z]/.test(shadeSuggestionRaw)
+  const shadeSuggestion = shadeSuggestionRaw && !/^\d+$/.test(shadeSuggestionRaw)
     ? shadeSuggestionRaw
     : null;
 
@@ -231,9 +230,7 @@ export default function App() {
 
   // global keyboard controller
   useEffect(() => {
-    const fields = miscMode
-      ? [miscItemRef, miscShadeRef, qtyRef, priceRef]
-      : [itemRef, shadeRef, qtyRef, priceRef];
+    const fields = [itemRef, shadeRef, qtyRef, priceRef];
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -269,21 +266,14 @@ export default function App() {
         return;
       }
 
-      // Escape — deselect row or exit misc mode
+      // Escape — deselect row
       if (e.key === "Escape") {
-        if (miscMode) {
-          setMiscMode(false);
-          setMiscItem("");
-          setMiscShade("");
-          setPrice(0);
-          setQty(1);
-        }
         setSelectedRow(null);
         return;
       }
 
-      // Tab — accept autofill suggestion (only in normal mode)
-      if (e.key === "Tab" && !miscMode) {
+      // Tab — accept autofill suggestion
+      if (e.key === "Tab") {
         if (target === itemRef.current && itemSuggestion && item !== itemSuggestion) {
           e.preventDefault();
           selectItem(itemSuggestion);
@@ -298,37 +288,12 @@ export default function App() {
 
       if (e.key !== "Enter") return;
 
-      // Misc mode enter handling
-      if (miscMode) {
-        if (target === miscItemRef.current) {
-          e.preventDefault();
-          miscShadeRef.current?.focus();
-          return;
-        }
-        if (target === miscShadeRef.current) {
-          e.preventDefault();
-          qtyRef.current?.focus();
-          return;
-        }
-        if (target === qtyRef.current) {
-          e.preventDefault();
-          priceRef.current?.focus();
-          return;
-        }
-        if (target === priceRef.current && miscItem && price) {
-          e.preventDefault();
-          addItem();
-          return;
-        }
-        return;
-      }
-
-      // Normal mode enter handling
+      // Enter on item field
       if (target === itemRef.current) {
         if (itemSuggestion && item !== itemSuggestion) {
           e.preventDefault();
           selectItem(itemSuggestion);
-        } else if (item && allItems.includes(item)) {
+        } else if (item) {
           e.preventDefault();
           if (isStandard) qtyRef.current?.focus();
           else shadeRef.current?.focus();
@@ -336,29 +301,33 @@ export default function App() {
         return;
       }
 
+      // Enter on shade field
       if (target === shadeRef.current) {
         if (shadeSuggestion && shade !== shadeSuggestion) {
           e.preventDefault();
           selectShade(shadeSuggestion);
-        } else if (shade && shades.includes(shade)) {
+        } else if (shade) {
           e.preventDefault();
           qtyRef.current?.focus();
         }
         return;
       }
 
+      // qty → price
       if (target === qtyRef.current) {
         e.preventDefault();
         priceRef.current?.focus();
         return;
       }
 
+      // price → add item
       if (target === priceRef.current && item && shade && price) {
         e.preventDefault();
         addItem();
         return;
       }
 
+      // global fallback
       if (tag !== "BUTTON" && item && shade && price) {
         e.preventDefault();
         addItem();
@@ -367,38 +336,19 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, miscMode, miscItem, miscShade, allItems]);
+  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems]);
 
   const addItem = () => {
-    // MISC MODE
-    if (miscMode) {
-      if (!miscItem || !price) return;
-      const total = qty * price;
-      setItems(prev => [...prev, {
-        item: miscItem,
-        shade: miscShade.trim() || "MISC",
-        qty,
-        cost: 0,
-        price,
-        total,
-        profit: price * qty,
-      }]);
-      setMiscItem("");
-      setMiscShade("");
-      setQty(1);
-      setPrice(0);
-      setTimeout(() => miscItemRef.current?.focus(), 50);
-      return;
-    }
-
-    // NORMAL MODE
     if (!item || !shade || !price) return;
+
     const total = qty * price;
     const profit = (price - cost) * qty;
+
     setItems(prev => [...prev, { item, shade, qty, cost, price, total, profit }]);
     setShade("");
     setQty(1);
     setPrice(0);
+
     if (isStandard) {
       setItem("");
       setTimeout(() => itemRef.current?.focus(), 50);
@@ -426,7 +376,7 @@ export default function App() {
   const discountPct = pointsDiscount > 0 ? 0 : (applicableSlab?.pct ?? 0);
   const finalTotal = grandTotal - discountAmt;
 
-  // ── Capture bill image (before items are cleared) ──
+  // ── Capture bill image ──
   const captureBillImage = async (): Promise<Blob | null> => {
     const billEl = document.getElementById("print-bill");
     if (!billEl) return null;
@@ -481,7 +431,7 @@ export default function App() {
     });
   };
 
-  // ── Save bill only ──
+  // ── Save bill ──
   const saveBill = async (): Promise<boolean> => {
     if (items.length === 0 || saving) return false;
     setSaving(true);
@@ -514,7 +464,7 @@ export default function App() {
     }
   };
 
-  // ── Send WhatsApp with pre-captured image ──
+  // ── Send WhatsApp ──
   const sendWhatsAppWithBlob = async (blob: Blob) => {
     const cleaned = phone.replace(/[^0-9]/g, "");
     if (!cleaned) return;
@@ -535,7 +485,6 @@ export default function App() {
     window.open(`https://wa.me/${cleaned}`, "_blank");
   };
 
-  // ── Send bill (no save) ──
   const sendWhatsApp = async () => {
     if (!phone || items.length === 0) return;
     const blob = await captureBillImage();
@@ -543,31 +492,23 @@ export default function App() {
     await sendWhatsAppWithBlob(blob);
   };
 
-  // ── Save & Send (captures image FIRST, then saves, then sends) ──
+  // ── Save & Send ──
   const saveBillAndSend = async () => {
     if (items.length === 0 || saving) return;
 
-    // Step 1: Capture image while bill is still rendered
     const blob = phone ? await captureBillImage() : null;
-
-    // Step 2: Save
     const saved = await saveBill();
 
     if (saved) {
       alert("Bill saved");
 
-      // Step 3: Send via WhatsApp (image already captured)
       if (phone && blob) {
         await sendWhatsAppWithBlob(blob);
       }
 
-      // Step 4: Clear state
       setItems([]);
       setItem("");
       setShade("");
-      setMiscItem("");
-      setMiscShade("");
-      setMiscMode(false);
       setSelectedRow(null);
       setCustomer(null);
       setCustomerName("");
@@ -576,7 +517,7 @@ export default function App() {
     }
   };
 
-  // ── Save only (no send) ──
+  // ── Save only ──
   const saveBillOnly = async () => {
     const saved = await saveBill();
     if (saved) {
@@ -584,9 +525,6 @@ export default function App() {
       setItems([]);
       setItem("");
       setShade("");
-      setMiscItem("");
-      setMiscShade("");
-      setMiscMode(false);
       setSelectedRow(null);
       setCustomer(null);
       setCustomerName("");
@@ -595,7 +533,7 @@ export default function App() {
     }
   };
 
-  // ── Generate restock list ──
+  // ── Restock list ──
   const generateRestockList = async () => {
     setRestockLoading(true);
     try {
@@ -660,84 +598,36 @@ export default function App() {
       {/* ---- INPUT AREA ---- */}
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
       <div className="no-print" style={styles.card}>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-          <button
-            style={{
-              ...styles.button,
-              background: miscMode ? "#cc3333" : "#555",
-              fontSize: 12,
-              padding: "8px 14px",
-            }}
-            onClick={() => {
-              setMiscMode(!miscMode);
-              setItem("");
-              setShade("");
-              setMiscItem("");
-              setMiscShade("");
-              setPrice(0);
-              setCost(0);
-              setQty(1);
-              setTimeout(() => miscMode ? itemRef.current?.focus() : miscItemRef.current?.focus(), 50);
-            }}
-          >
-            {miscMode ? "✕ Exit Misc Mode" : "+ Misc Item"}
-          </button>
-        </div>
-
         <div style={styles.row}>
-          {miscMode ? (
-            <>
-              <input
-                ref={miscItemRef}
-                value={miscItem}
-                onChange={(e) => setMiscItem(e.target.value)}
-                placeholder="Item name..."
-                style={styles.smallInput}
-                autoFocus
-                autoComplete="off"
-              />
-              <input
-                ref={miscShadeRef}
-                value={miscShade}
-                onChange={(e) => setMiscShade(e.target.value)}
-                placeholder="Shade (optional)..."
-                style={styles.smallInput}
-                autoComplete="off"
-              />
-            </>
-          ) : (
-            <>
-              <div style={styles.autofillWrapper}>
-                <input
-                  ref={itemRef}
-                  value={item}
-                  onChange={(e) => setItem(e.target.value)}
-                  placeholder="Item..."
-                  style={styles.smallInput}
-                  autoFocus
-                  autoComplete="off"
-                />
-                {itemSuggestion && item !== itemSuggestion && (
-                  <span style={styles.suggestion}>{itemSuggestion}</span>
-                )}
-              </div>
+          <div style={styles.autofillWrapper}>
+            <input
+              ref={itemRef}
+              value={item}
+              onChange={(e) => setItem(e.target.value)}
+              placeholder="Item..."
+              style={styles.smallInput}
+              autoFocus
+              autoComplete="off"
+            />
+            {itemSuggestion && item !== itemSuggestion && (
+              <span style={styles.suggestion}>{itemSuggestion}</span>
+            )}
+          </div>
 
-              {!isStandard && (
-                <div style={styles.autofillWrapper}>
-                  <input
-                    ref={shadeRef}
-                    value={shade}
-                    onChange={(e) => setShade(e.target.value)}
-                    placeholder="Shade/Variant..."
-                    style={styles.smallInput}
-                    autoComplete="off"
-                  />
-                  {shadeSuggestion && shade !== shadeSuggestion && (
-                    <span style={styles.suggestion}>{shadeSuggestion}</span>
-                  )}
-                </div>
+          {!isStandard && (
+            <div style={styles.autofillWrapper}>
+              <input
+                ref={shadeRef}
+                value={shade}
+                onChange={(e) => setShade(e.target.value)}
+                placeholder="Shade/Variant..."
+                style={styles.smallInput}
+                autoComplete="off"
+              />
+              {shadeSuggestion && shade !== shadeSuggestion && (
+                <span style={styles.suggestion}>{shadeSuggestion}</span>
               )}
-            </>
+            </div>
           )}
 
           <input
@@ -759,12 +649,6 @@ export default function App() {
           />
           <button style={styles.button} onClick={addItem}>Add</button>
         </div>
-
-        {miscMode && (
-          <div style={{ marginTop: 8, fontSize: 12, color: "#888" }}>
-            Misc mode — no stock lookup. Enter item name, optional shade, and price manually.
-          </div>
-        )}
       </div>
 
       {/* ---- BILL AREA ---- */}
