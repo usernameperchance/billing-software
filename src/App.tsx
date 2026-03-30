@@ -518,7 +518,7 @@ export default function App() {
   const generateRestockList = async () => {
     setRestockLoading(true);
     try {
-      const res = await fetch("/api/restockList");
+      const res = await fetch("/api/restockAll?type=store");
       const data = await res.json();
 
       if (!data.message) {
@@ -544,7 +544,7 @@ export default function App() {
   const generateLoftRestock = async () => {
     setRestockLoading(true);
     try {
-      const res = await fetch("/api/generateLoftRestock");
+      const res = await fetch("/api/restockAll?type=loft");
       const data = await res.json();
 
       if (!data.message) {
