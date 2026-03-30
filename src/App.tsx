@@ -36,6 +36,14 @@ export default function App() {
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
 
+  // misc mode
+  const [miscMode, setMiscMode] = useState(false);
+  const [miscItem, setMiscItem] = useState("");
+  const [miscShade, setMiscShade] = useState("");
+
+  // restock
+  const [restockLoading, setRestockLoading] = useState(false);
+
   // selected bill row for arrow key navigation
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
 
@@ -48,6 +56,8 @@ export default function App() {
   const shadeRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
+  const miscItemRef = useRef<HTMLInputElement>(null);
+  const miscShadeRef = useRef<HTMLInputElement>(null);
 
   const [billDate] = useState(() =>
     new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
@@ -60,6 +70,14 @@ export default function App() {
       hour12: true,
     })
   );
+
+  // Check if after 8 PM IST
+  const isAfter8PM = useMemo(() => {
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istTime = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + istOffset);
+    return istTime.getHours() >= 20;
+  }, []);
 
   const fetchNextBillNo = () => {
     fetch("/api/bill")
@@ -109,6 +127,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (miscMode) return;
     if (!item || !allItems.includes(item)) {
       setShades([]);
       setShade("");
@@ -124,30 +143,33 @@ export default function App() {
         setShades(fetched);
       })
       .catch(console.error);
-  }, [item, allItems]);
+  }, [item, allItems, miscMode]);
 
   useEffect(() => {
+    if (miscMode) return;
     if (shades.length === 1 && shades[0].toLowerCase() === "standard") {
       setShade(shades[0]);
     }
-  }, [shades]);
+  }, [shades, miscMode]);
 
   useEffect(() => {
+    if (miscMode) return;
     if (!item || !shade) return;
     fetch(`/api/getCost?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then(res => res.json())
       .then(data => setCost(data.cost || 0))
       .catch(() => setCost(0));
-  }, [item, shade]);
+  }, [item, shade, miscMode]);
 
   useEffect(() => {
+    if (miscMode) return;
     if (!item || !shade || !shades.includes(shade)) return;
     const key = `${item}__${shade}`;
     if (priceCache.current[key]) {
       setPrice(priceCache.current[key].price);
       const sq = priceCache.current[key].qty;
       if (sq >= 0 && sq < 2 && warnedKey !== `${item}-${shade}`) {
-        window.alert("low stock for this shade. check the stock sheet for details."); //wa.me handling to send low stock whatsapp at end of day
+        window.alert("Low stock for this shade. Check the stock sheet for details.");
         setWarnedKey(`${item}-${shade}`);
       }
       return;
@@ -160,16 +182,16 @@ export default function App() {
         priceCache.current[key] = { price: p, qty: q };
         setPrice(p);
         if (q >= 0 && q < 2 && warnedKey !== `${item}-${shade}`) {
-          window.alert("low stock for this shade. check the stock sheet for details.");
+          window.alert("Low stock for this shade. Check the stock sheet for details.");
           setWarnedKey(`${item}-${shade}`);
         }
       })
       .catch(() => setPrice(0));
-  }, [item, shade, shades, warnedKey]);
+  }, [item, shade, shades, warnedKey, miscMode]);
 
-  const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
+  const isStandard = !miscMode && shades.length === 1 && shades[0].toLowerCase() === "standard";
 
-  // Fuse instances — lenient threshold so partial/middle matches work
+  // Fuse instances
   const itemFuse = useMemo(() => new Fuse(allItems, {
     threshold: 0.4,
     distance: 100,
@@ -184,12 +206,17 @@ export default function App() {
     minMatchCharLength: 1,
   }), [shades]);
 
-  const itemSuggestion = item
+  const itemSuggestion = (!miscMode && item)
     ? itemFuse.search(item)[0]?.item ?? null
     : null;
 
-  const shadeSuggestion = shade
+  // shade suggestion — suppress ghost text for pure-number shades
+  const shadeSuggestionRaw = (!miscMode && shade)
     ? shadeFuse.search(shade)[0]?.item ?? null
+    : null;
+
+  const shadeSuggestion = shadeSuggestionRaw && /[a-zA-Z]/.test(shadeSuggestionRaw)
+    ? shadeSuggestionRaw
     : null;
 
   const selectItem = (val: string) => {
@@ -204,13 +231,15 @@ export default function App() {
 
   // global keyboard controller
   useEffect(() => {
-    const fields = [itemRef, shadeRef, qtyRef, priceRef];
+    const fields = miscMode
+      ? [miscItemRef, miscShadeRef, qtyRef, priceRef]
+      : [itemRef, shadeRef, qtyRef, priceRef];
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const tag = target.tagName;
 
-      // ── Arrow Right / Left — move between input fields ──
+      // Arrow Right / Left — move between input fields
       if (e.key === "ArrowRight" && tag === "INPUT") {
         const idx = fields.findIndex(r => r.current === target);
         if (idx !== -1 && idx < fields.length - 1) {
@@ -228,7 +257,7 @@ export default function App() {
         return;
       }
 
-      // ── Arrow Up / Down — navigate bill table rows (outside inputs) ──
+      // Arrow Up / Down — navigate bill table rows (outside inputs)
       if (e.key === "ArrowDown" && tag !== "INPUT") {
         e.preventDefault();
         setSelectedRow(prev => (prev === null ? 0 : Math.min(prev + 1, items.length - 1)));
@@ -240,14 +269,21 @@ export default function App() {
         return;
       }
 
-      // ── Escape — deselect row ──
+      // Escape — deselect row or exit misc mode
       if (e.key === "Escape") {
+        if (miscMode) {
+          setMiscMode(false);
+          setMiscItem("");
+          setMiscShade("");
+          setPrice(0);
+          setQty(1);
+        }
         setSelectedRow(null);
         return;
       }
 
-      // ── Tab — accept autofill suggestion and move focus forward ──
-      if (e.key === "Tab") {
+      // Tab — accept autofill suggestion (only in normal mode)
+      if (e.key === "Tab" && !miscMode) {
         if (target === itemRef.current && itemSuggestion && item !== itemSuggestion) {
           e.preventDefault();
           selectItem(itemSuggestion);
@@ -262,7 +298,32 @@ export default function App() {
 
       if (e.key !== "Enter") return;
 
-      // ── Enter on item — accept autofill suggestion or confirm ──
+      // Misc mode enter handling
+      if (miscMode) {
+        if (target === miscItemRef.current) {
+          e.preventDefault();
+          miscShadeRef.current?.focus();
+          return;
+        }
+        if (target === miscShadeRef.current) {
+          e.preventDefault();
+          qtyRef.current?.focus();
+          return;
+        }
+        if (target === qtyRef.current) {
+          e.preventDefault();
+          priceRef.current?.focus();
+          return;
+        }
+        if (target === priceRef.current && miscItem && price) {
+          e.preventDefault();
+          addItem();
+          return;
+        }
+        return;
+      }
+
+      // Normal mode enter handling
       if (target === itemRef.current) {
         if (itemSuggestion && item !== itemSuggestion) {
           e.preventDefault();
@@ -275,7 +336,6 @@ export default function App() {
         return;
       }
 
-      // ── Enter on shade — accept autofill or confirm ──
       if (target === shadeRef.current) {
         if (shadeSuggestion && shade !== shadeSuggestion) {
           e.preventDefault();
@@ -287,21 +347,18 @@ export default function App() {
         return;
       }
 
-      // ── qty → price ──
       if (target === qtyRef.current) {
         e.preventDefault();
         priceRef.current?.focus();
         return;
       }
 
-      // ── price → add item ──
       if (target === priceRef.current && item && shade && price) {
         e.preventDefault();
         addItem();
         return;
       }
 
-      // ── global fallback — add from anywhere except buttons ──
       if (tag !== "BUTTON" && item && shade && price) {
         e.preventDefault();
         addItem();
@@ -310,9 +367,31 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard]);
+  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, miscMode, miscItem, miscShade, allItems]);
 
   const addItem = () => {
+    // MISC MODE
+    if (miscMode) {
+      if (!miscItem || !price) return;
+      const total = qty * price;
+      setItems(prev => [...prev, {
+        item: miscItem,
+        shade: miscShade.trim() || "MISC",
+        qty,
+        cost: 0,
+        price,
+        total,
+        profit: price * qty,
+      }]);
+      setMiscItem("");
+      setMiscShade("");
+      setQty(1);
+      setPrice(0);
+      setTimeout(() => miscItemRef.current?.focus(), 50);
+      return;
+    }
+
+    // NORMAL MODE
     if (!item || !shade || !price) return;
     const total = qty * price;
     const profit = (price - cost) * qty;
@@ -337,54 +416,51 @@ export default function App() {
   const applicableSlab = getApplicableSlab(grandTotal);
   const slabDiscount = applicableSlab ? Math.round(grandTotal * applicableSlab.pct / 100) : 0;
 
-  // points redemption value — only if toggled on, config exists, customer has enough points
   const pointsDiscount = (() => {
     if (!redeemPoints || !pointsConfig || !customer) return 0;
     if (customer.points < pointsConfig.minRedeem) return 0;
     return Math.floor(customer.points * pointsConfig.redeemRate);
   })();
 
-  // points take priority — if redeeming, slab discount is skipped
   const discountAmt = pointsDiscount > 0 ? pointsDiscount : slabDiscount;
   const discountPct = pointsDiscount > 0 ? 0 : (applicableSlab?.pct ?? 0);
   const finalTotal = grandTotal - discountAmt;
 
-  const saveBill = async () => {
-    if (items.length === 0 || saving) return;
-    setSaving(true);
+  // ── Capture bill image (before items are cleared) ──
+  const captureBillImage = async (): Promise<Blob | null> => {
+    const billEl = document.getElementById("print-bill");
+    if (!billEl) return null;
+
     try {
-      const res = await fetch("/api/bill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items,
-          discountAmt,
-          discountPct,
-          finalTotal,
-          pointsRedeemed: pointsDiscount,
-          customer: phone ? { name: customerName, phone } : null,
-          earnRate: pointsConfig?.earnRate ?? 0,
-          redeemRate: pointsConfig?.redeemRate ?? 0,
-        }),
+      const logoEl = billEl.querySelector<HTMLImageElement>("img[alt='logo']");
+      const originalSrc = logoEl?.src ?? "";
+      if (logoEl) {
+        try {
+          const pngUrl = await svgToPngDataUrl("/logo.svg");
+          logoEl.src = pngUrl;
+          await new Promise(r => setTimeout(r, 100));
+        } catch { /* continue */ }
+      }
+
+      const noPrint = billEl.querySelectorAll<HTMLElement>(".no-print");
+      noPrint.forEach(el => el.style.display = "none");
+      const printOnly = billEl.querySelectorAll<HTMLElement>(".print-only");
+      printOnly.forEach(el => el.style.display = "inline");
+
+      const canvas = await html2canvas(billEl, {
+        scale: 2, backgroundColor: "#ffffff", useCORS: true, allowTaint: true, logging: false,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
-      priceCache.current = {};
-      fetchNextBillNo();
-      alert("Bill saved");
-      setItems([]);
-      setItem("");
-      setShade("");
-      setSelectedRow(null);
-      setCustomer(null);
-      setCustomerName("");
-      setPhone("");
-      setRedeemPoints(false);
+
+      noPrint.forEach(el => el.style.display = "");
+      printOnly.forEach(el => el.style.display = "none");
+      if (logoEl) logoEl.src = originalSrc;
+
+      return new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((blob) => resolve(blob), "image/png");
+      });
     } catch (err) {
-      console.error(err);
-      alert("Failed to save bill");
-    } finally {
-      setSaving(false);
+      console.error("Failed to capture bill image:", err);
+      return null;
     }
   };
 
@@ -405,60 +481,145 @@ export default function App() {
     });
   };
 
-  const sendWhatsApp = async () => {
-    if (!phone || items.length === 0) return;
-    const billEl = document.getElementById("print-bill");
-    if (!billEl) return;
+  // ── Save bill only ──
+  const saveBill = async (): Promise<boolean> => {
+    if (items.length === 0 || saving) return false;
+    setSaving(true);
     try {
-      const logoEl = billEl.querySelector<HTMLImageElement>("img[alt='logo']");
-      const originalSrc = logoEl?.src ?? "";
-      if (logoEl) {
-        try {
-          const pngUrl = await svgToPngDataUrl("/logo.svg");
-          logoEl.src = pngUrl;
-          await new Promise(r => setTimeout(r, 100));
-        } catch { /* continue anyway */ }
-      }
-      const noPrint = billEl.querySelectorAll<HTMLElement>(".no-print");
-      noPrint.forEach(el => el.style.display = "none");
-      const printOnly = billEl.querySelectorAll<HTMLElement>(".print-only");
-      printOnly.forEach(el => el.style.display = "inline");
-
-      const canvas = await html2canvas(billEl, {
-        scale: 2, backgroundColor: "#ffffff", useCORS: true, allowTaint: true, logging: false,
+      const res = await fetch("/api/bill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items,
+          discountAmt,
+          discountPct,
+          finalTotal,
+          pointsRedeemed: pointsDiscount,
+          customer: phone ? { name: customerName, phone } : null,
+          earnRate: pointsConfig?.earnRate ?? 0,
+          redeemRate: pointsConfig?.redeemRate ?? 0,
+        }),
       });
-
-      noPrint.forEach(el => el.style.display = "");
-      printOnly.forEach(el => el.style.display = "none");
-      if (logoEl) logoEl.src = originalSrc;
-
-      canvas.toBlob(async (blob: Blob | null) => {
-        if (!blob) return;
-        try {
-          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-          const cleaned = phone.replace(/[^0-9]/g, "");
-          window.open(`https://wa.me/${cleaned}`, "_blank");
-          alert("Bill image copied. Paste in WhatsApp to send.");
-        } catch {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `bill-${nextBillNo ?? "draft"}.png`;
-          a.click();
-          URL.revokeObjectURL(url);
-          const cleaned = phone.replace(/[^0-9]/g, "");
-          window.open(`https://wa.me/${cleaned}`, "_blank");
-        }
-      }, "image/png");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      priceCache.current = {};
+      fetchNextBillNo();
+      return true;
     } catch (err) {
       console.error(err);
-      alert("Failed to capture bill image.");
+      alert("Failed to save bill");
+      return false;
+    } finally {
+      setSaving(false);
     }
   };
 
+  // ── Send WhatsApp with pre-captured image ──
+  const sendWhatsAppWithBlob = async (blob: Blob) => {
+    const cleaned = phone.replace(/[^0-9]/g, "");
+    if (!cleaned) return;
+
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      alert("Bill image copied to clipboard. Paste it in the WhatsApp chat.");
+    } catch {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bill-${nextBillNo ?? "draft"}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      alert("Bill image downloaded. Attach it in WhatsApp.");
+    }
+
+    window.open(`https://wa.me/${cleaned}`, "_blank");
+  };
+
+  // ── Send bill (no save) ──
+  const sendWhatsApp = async () => {
+    if (!phone || items.length === 0) return;
+    const blob = await captureBillImage();
+    if (!blob) { alert("Failed to capture bill image."); return; }
+    await sendWhatsAppWithBlob(blob);
+  };
+
+  // ── Save & Send (captures image FIRST, then saves, then sends) ──
   const saveBillAndSend = async () => {
-    await saveBill();
-    if (phone) await sendWhatsApp();
+    if (items.length === 0 || saving) return;
+
+    // Step 1: Capture image while bill is still rendered
+    const blob = phone ? await captureBillImage() : null;
+
+    // Step 2: Save
+    const saved = await saveBill();
+
+    if (saved) {
+      alert("Bill saved");
+
+      // Step 3: Send via WhatsApp (image already captured)
+      if (phone && blob) {
+        await sendWhatsAppWithBlob(blob);
+      }
+
+      // Step 4: Clear state
+      setItems([]);
+      setItem("");
+      setShade("");
+      setMiscItem("");
+      setMiscShade("");
+      setMiscMode(false);
+      setSelectedRow(null);
+      setCustomer(null);
+      setCustomerName("");
+      setPhone("");
+      setRedeemPoints(false);
+    }
+  };
+
+  // ── Save only (no send) ──
+  const saveBillOnly = async () => {
+    const saved = await saveBill();
+    if (saved) {
+      alert("Bill saved");
+      setItems([]);
+      setItem("");
+      setShade("");
+      setMiscItem("");
+      setMiscShade("");
+      setMiscMode(false);
+      setSelectedRow(null);
+      setCustomer(null);
+      setCustomerName("");
+      setPhone("");
+      setRedeemPoints(false);
+    }
+  };
+
+  // ── Generate restock list ──
+  const generateRestockList = async () => {
+    setRestockLoading(true);
+    try {
+      const res = await fetch("/api/restockList");
+      const data = await res.json();
+
+      if (!data.message) {
+        alert(data.summary || "No restock needed today.");
+        return;
+      }
+
+      const proceed = window.confirm(
+        `Restock Summary:\n${data.summary}\n\nOpen WhatsApp to send?`
+      );
+
+      if (proceed && data.waLink) {
+        window.open(data.waLink, "_blank");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate restock list");
+    } finally {
+      setRestockLoading(false);
+    }
   };
 
   const updateQty = (idx: number, newQty: number) => {
@@ -494,43 +655,89 @@ export default function App() {
           #print-bill div { box-shadow: none !important; background: transparent !important; }
           .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
-
       `}</style>
 
       {/* ---- INPUT AREA ---- */}
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
       <div className="no-print" style={styles.card}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button
+            style={{
+              ...styles.button,
+              background: miscMode ? "#cc3333" : "#555",
+              fontSize: 12,
+              padding: "8px 14px",
+            }}
+            onClick={() => {
+              setMiscMode(!miscMode);
+              setItem("");
+              setShade("");
+              setMiscItem("");
+              setMiscShade("");
+              setPrice(0);
+              setCost(0);
+              setQty(1);
+              setTimeout(() => miscMode ? itemRef.current?.focus() : miscItemRef.current?.focus(), 50);
+            }}
+          >
+            {miscMode ? "✕ Exit Misc Mode" : "+ Misc Item"}
+          </button>
+        </div>
+
         <div style={styles.row}>
-
-          <div style={styles.autofillWrapper}>
-            <input
-              ref={itemRef}
-              value={item}
-              onChange={(e) => setItem(e.target.value)}
-              placeholder="Item..."
-              style={styles.smallInput}
-              autoFocus
-              autoComplete="off"
-            />
-            {itemSuggestion && item !== itemSuggestion && (
-              <span style={styles.suggestion}>{itemSuggestion}</span>
-            )}
-          </div>
-
-          {!isStandard && (
-            <div style={styles.autofillWrapper}>
+          {miscMode ? (
+            <>
               <input
-                ref={shadeRef}
-                value={shade}
-                onChange={(e) => setShade(e.target.value)}
-                placeholder="Shade/Variant..."
+                ref={miscItemRef}
+                value={miscItem}
+                onChange={(e) => setMiscItem(e.target.value)}
+                placeholder="Item name..."
+                style={styles.smallInput}
+                autoFocus
+                autoComplete="off"
+              />
+              <input
+                ref={miscShadeRef}
+                value={miscShade}
+                onChange={(e) => setMiscShade(e.target.value)}
+                placeholder="Shade (optional)..."
                 style={styles.smallInput}
                 autoComplete="off"
               />
-              {shadeSuggestion && shade !== shadeSuggestion && (
-                <span style={styles.suggestion}>{shadeSuggestion}</span>
+            </>
+          ) : (
+            <>
+              <div style={styles.autofillWrapper}>
+                <input
+                  ref={itemRef}
+                  value={item}
+                  onChange={(e) => setItem(e.target.value)}
+                  placeholder="Item..."
+                  style={styles.smallInput}
+                  autoFocus
+                  autoComplete="off"
+                />
+                {itemSuggestion && item !== itemSuggestion && (
+                  <span style={styles.suggestion}>{itemSuggestion}</span>
+                )}
+              </div>
+
+              {!isStandard && (
+                <div style={styles.autofillWrapper}>
+                  <input
+                    ref={shadeRef}
+                    value={shade}
+                    onChange={(e) => setShade(e.target.value)}
+                    placeholder="Shade/Variant..."
+                    style={styles.smallInput}
+                    autoComplete="off"
+                  />
+                  {shadeSuggestion && shade !== shadeSuggestion && (
+                    <span style={styles.suggestion}>{shadeSuggestion}</span>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
 
           <input
@@ -552,6 +759,12 @@ export default function App() {
           />
           <button style={styles.button} onClick={addItem}>Add</button>
         </div>
+
+        {miscMode && (
+          <div style={{ marginTop: 8, fontSize: 12, color: "#888" }}>
+            Misc mode — no stock lookup. Enter item name, optional shade, and price manually.
+          </div>
+        )}
       </div>
 
       {/* ---- BILL AREA ---- */}
@@ -701,15 +914,21 @@ export default function App() {
 
       {/* ---- ACTION BUTTONS ---- */}
       <div className="no-print" style={styles.actions}>
-        <input
-          value={phone}
-          onChange={(e) => {
-            setPhone(e.target.value);
-            lookupCustomer(e.target.value);
-          }}
-          placeholder="Phone no. for WhatsApp..."
-          style={{ ...styles.smallInput, maxWidth: 220, display: "none" }}
-        />
+        {isAfter8PM && (
+          <button
+            style={{
+              ...styles.printBtn,
+              background: "#e67e22",
+              opacity: restockLoading ? 0.6 : 1,
+              marginRight: "auto",
+            }}
+            onClick={generateRestockList}
+            disabled={restockLoading}
+          >
+            {restockLoading ? "Loading..." : "📋 Restock List"}
+          </button>
+        )}
+
         <button
           style={{ ...styles.printBtn, background: "#25D366", opacity: (!phone || items.length === 0) ? 0.5 : 1 }}
           onClick={sendWhatsApp}
@@ -719,9 +938,9 @@ export default function App() {
         </button>
         <button style={styles.printBtn} onClick={() => window.print()}>🖨 Print Bill</button>
         <button
-          style={{ ...styles.printBtn, opacity: saving ? 0.6 : 1 }}
-          onClick={saveBill}
-          disabled={saving}
+          style={{ ...styles.printBtn, opacity: (saving || items.length === 0) ? 0.6 : 1 }}
+          onClick={saveBillOnly}
+          disabled={saving || items.length === 0}
         >
           {saving ? "Saving..." : "💾 Save to Sheets"}
         </button>
@@ -887,7 +1106,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: 14,
     color: "#333",
   },
-  actions: { display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" },
+  actions: { display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end", flexWrap: "wrap" },
   printBtn: {
     padding: "11px 20px",
     fontSize: 14,

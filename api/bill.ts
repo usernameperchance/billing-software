@@ -15,7 +15,6 @@ function getISTDateTime() {
   return { date, time };
 }
 
-// generate next customer ID from existing rows
 function generateCustomerId(rows: any[][]): string {
   const ids = rows
     .map(r => r[0]?.toString())
@@ -50,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         discountPct = 0,
         finalTotal,
         pointsRedeemed = 0,
-        customer, // { name, phone }
+        customer,
         earnRate = 0,
         redeemRate = 0,
       } = req.body;
@@ -85,9 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── Discount / points summary rows ──
       const effectiveDiscount = pointsRedeemed > 0 ? pointsRedeemed : discountAmt;
       if (effectiveDiscount > 0) {
-        const label = pointsRedeemed > 0
-          ? `Points Redeemed`
-          : `Discount`;
+        const label = pointsRedeemed > 0 ? `Points Redeemed` : `Discount`;
         const detail = pointsRedeemed > 0
           ? `${pointsRedeemed / redeemRate} pts`
           : `${discountPct}%`;
@@ -104,96 +101,106 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      // ── Stock updates (parallel) ──
+      // ── Stock updates — skip misc items and missing tabs ──
       await Promise.all(items.map(async (i: any) => {
         const { item, shade, qty } = i;
-        const stockRes = await gsapi.spreadsheets.values.get({
-          spreadsheetId: SPREADSHEET_ID,
-          range: `'${item}'!A2:B`,
-        });
-        const rows = stockRes.data.values || [];
-        const rowIndex = rows.findIndex(
-          r => r[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
-        );
-        if (rowIndex === -1) {
-          console.error(`Stock update skipped: shade "${shade}" not found in tab "${item}"`);
-          return;
+
+        // Skip misc items (shade "MISC" or items not in registry)
+        if (shade === "MISC") return;
+
+        try {
+          const stockRes = await gsapi.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `'${item}'!A2:B`,
+          });
+          const rows = stockRes.data.values || [];
+          const rowIndex = rows.findIndex(
+            r => r[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
+          );
+          if (rowIndex === -1) {
+            console.error(`Stock update skipped: shade "${shade}" not found in tab "${item}"`);
+            return;
+          }
+          const newStock = Number(rows[rowIndex][1]) - qty;
+          await Promise.all([
+            gsapi.spreadsheets.values.update({
+              spreadsheetId: SPREADSHEET_ID,
+              range: `'${item}'!B${rowIndex + 2}`,
+              valueInputOption: "USER_ENTERED",
+              requestBody: { values: [[newStock]] },
+            }),
+            gsapi.spreadsheets.values.update({
+              spreadsheetId: SPREADSHEET_ID,
+              range: `'${item}'!D${rowIndex + 2}`,
+              valueInputOption: "USER_ENTERED",
+              requestBody: { values: [[`${date} ${time}`]] },
+            }),
+          ]);
+        } catch (stockErr) {
+          // Tab doesn't exist (misc item typed with real-looking name) — skip silently
+          console.error(`Stock update failed for "${item}" / "${shade}":`, stockErr);
         }
-        const newStock = Number(rows[rowIndex][1]) - qty;
-        await Promise.all([
-          gsapi.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `'${item}'!B${rowIndex + 2}`,
-            valueInputOption: "USER_ENTERED",
-            requestBody: { values: [[newStock]] },
-          }),
-          gsapi.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `'${item}'!D${rowIndex + 2}`,
-            valueInputOption: "USER_ENTERED",
-            requestBody: { values: [[`${date} ${time}`]] },
-          }),
-        ]);
       }));
 
-      // ── Customer upsert ──
+      // ── Customer upsert — wrapped so it can't kill the response ──
       if (customer?.phone) {
-        const custRes = await gsapi.spreadsheets.values.get({
-          spreadsheetId: SPREADSHEET_ID,
-          range: "Customers!A2:H",
-        });
-        const custRows = custRes.data.values || [];
-        const rowIndex = custRows.findIndex(
-          r => r[2]?.toString().trim() === customer.phone.toString().trim()
-        );
-
-        // points earned on this bill (only if not redeeming)
-        const pointsEarned = pointsRedeemed > 0
-          ? 0
-          : Math.floor((finalTotal / 100) * earnRate);
-
-        if (rowIndex === -1) {
-          // new customer — append row
-          const newId = generateCustomerId(custRows);
-          await gsapi.spreadsheets.values.append({
+        try {
+          const custRes = await gsapi.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: "Customers!A:H",
-            valueInputOption: "USER_ENTERED",
-            requestBody: {
-              values: [[
-                newId,
-                customer.name || "",
-                customer.phone,
-                date,        // FirstVisit
-                date,        // LastVisit
-                finalTotal,  // TotalSpend
-                1,           // TotalBills
-                pointsEarned,
-              ]],
-            },
+            range: "Customers!A2:H",
           });
-        } else {
-          // existing customer — update in place
-          const existing = custRows[rowIndex];
-          const currentPoints = Number(existing[7] || 0);
-          const newPoints = pointsRedeemed > 0
-            ? currentPoints - pointsRedeemed / redeemRate  // deduct redeemed points
-            : currentPoints + pointsEarned;
+          const custRows = custRes.data.values || [];
+          const rowIndex = custRows.findIndex(
+            r => r[2]?.toString().trim() === customer.phone.toString().trim()
+          );
 
-          const sheetRow = rowIndex + 2; // +1 for header, +1 for 1-indexed
-          await gsapi.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `Customers!E${sheetRow}:H${sheetRow}`,
-            valueInputOption: "USER_ENTERED",
-            requestBody: {
-              values: [[
-                date,                                          // LastVisit
-                Number(existing[5] || 0) + finalTotal,        // TotalSpend
-                Number(existing[6] || 0) + 1,                 // TotalBills
-                Math.max(0, newPoints),                        // Points (floor at 0)
-              ]],
-            },
-          });
+          const pointsEarned = pointsRedeemed > 0
+            ? 0
+            : Math.floor((finalTotal / 100) * earnRate);
+
+          if (rowIndex === -1) {
+            const newId = generateCustomerId(custRows);
+            await gsapi.spreadsheets.values.append({
+              spreadsheetId: SPREADSHEET_ID,
+              range: "Customers!A:H",
+              valueInputOption: "USER_ENTERED",
+              requestBody: {
+                values: [[
+                  newId,
+                  customer.name || "",
+                  customer.phone,
+                  date,
+                  date,
+                  finalTotal,
+                  1,
+                  pointsEarned,
+                ]],
+              },
+            });
+          } else {
+            const existing = custRows[rowIndex];
+            const currentPoints = Number(existing[7] || 0);
+            const newPoints = pointsRedeemed > 0
+              ? currentPoints - pointsRedeemed / redeemRate
+              : currentPoints + pointsEarned;
+
+            const sheetRow = rowIndex + 2;
+            await gsapi.spreadsheets.values.update({
+              spreadsheetId: SPREADSHEET_ID,
+              range: `Customers!E${sheetRow}:H${sheetRow}`,
+              valueInputOption: "USER_ENTERED",
+              requestBody: {
+                values: [[
+                  date,
+                  Number(existing[5] || 0) + finalTotal,
+                  Number(existing[6] || 0) + 1,
+                  Math.max(0, newPoints),
+                ]],
+              },
+            });
+          }
+        } catch (custErr) {
+          console.error("Customer upsert failed (bill still saved):", custErr);
         }
       }
 
