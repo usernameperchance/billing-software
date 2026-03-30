@@ -35,6 +35,8 @@ export default function App() {
   const [pointsConfig, setPointsConfig] = useState<PointsConfig | null>(null);
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
+  const [restockPlan, setRestockPlan] = useState<any>(null);
+  const [confirmingTransfer, setConfirmingTransfer] = useState(false);
 
   // restock
   const [restockLoading, setRestockLoading] = useState(false);
@@ -579,6 +581,96 @@ export default function App() {
     setSelectedRow(null);
   };
 
+  const generateHooksRestock = async () => {
+  const item = window.prompt("Enter item name for restock:");
+  if (!item) return;
+
+  setRestockLoading(true);
+  try {
+    const res = await fetch(`/api/hooksRestock?item=${encodeURIComponent(item)}`);
+    const data = await res.json();
+
+    if (!data.transfers || data.transfers.length === 0) {
+      alert(data.message || "No restock needed");
+      return;
+    }
+
+    setRestockPlan(data);
+    alert(`Restock plan generated. Review and confirm transfer.`);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to generate restock plan");
+  } finally {
+    setRestockLoading(false);
+  }
+};
+
+const confirmTransfer = async () => {
+  if (!restockPlan) return;
+
+  const confirm = window.confirm(
+    `Confirm physical transfer completed?\n\n${restockPlan.message}`
+  );
+  if (!confirm) return;
+
+  setConfirmingTransfer(true);
+  try {
+    const res = await fetch("/api/confirmHooksTransfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        item: restockPlan.item,
+        transfers: restockPlan.transfers,
+        shortages: restockPlan.shortages,
+      }),
+    });
+
+    if (!res.ok) throw new Error("Failed");
+
+    alert("Transfer confirmed. Stocks updated.");
+    setRestockPlan(null);
+
+    // Send WhatsApp
+    const cleaned = "PHONE_NUMBER_HERE".replace(/[^0-9]/g, ""); // Replace
+    window.open(
+      `https://wa.me/${cleaned}?text=${encodeURIComponent(restockPlan.message)}`,
+      "_blank"
+    );
+  } catch (err) {
+    console.error(err);
+    alert("Failed to confirm transfer");
+  } finally {
+    setConfirmingTransfer(false);
+  }
+};
+
+const generateBhiwandiRequests = async () => {
+  setRestockLoading(true);
+  try {
+    const res = await fetch("/api/bhiwandiRequests");
+    const data = await res.json();
+
+    if (!data.message) {
+      alert(data.summary || "No pending requests");
+      return;
+    }
+
+    const proceed = window.confirm(
+      `Bhiwandi Request Summary:\n${data.summary}\n\nSend WhatsApp?`
+    );
+
+    if (proceed && data.waLink) {
+      window.open(data.waLink, "_blank");
+      alert("Request sent to Bhiwandi");
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Failed to generate Bhiwandi requests");
+  } finally {
+    setRestockLoading(false);
+  }
+};
+
   return (
     <div className="app-container" style={styles.container}>
       <style>{`
@@ -729,7 +821,6 @@ export default function App() {
         </table>
 
         <hr style={styles.divider} />
-
         <div style={styles.totalsBlock}>
           <div className="no-print" style={styles.profitRow}>
             <span>Net Profit</span>
@@ -850,6 +941,46 @@ export default function App() {
         >
           {saving ? "Saving..." : "💾📲 Save & Send"}
         </button>
+        <div className="no-print" style={styles.actions}>
+  <button
+    style={{
+      ...styles.printBtn,
+      background: "#3498db",
+      opacity: restockLoading ? 0.6 : 1,
+      marginRight: "auto",
+    }}
+    onClick={generateHooksRestock}
+    disabled={restockLoading}
+  >
+    📋 Restock Hooks
+  </button>
+
+  {restockPlan && (
+    <button
+      style={{
+        ...styles.printBtn,
+        background: "#27ae60",
+        opacity: confirmingTransfer ? 0.6 : 1,
+      }}
+      onClick={confirmTransfer}
+      disabled={confirmingTransfer}
+    >
+      ✅ Confirm Transfer
+    </button>
+  )}
+
+  <button
+    style={{
+      ...styles.printBtn,
+      background: "#e67e22",
+      opacity: restockLoading ? 0.6 : 1,
+    }}
+    onClick={generateBhiwandiRequests}
+    disabled={restockLoading}
+  >
+    🏭 Bhiwandi Request
+  </button>
+</div>
       </div>
     </div>
   );
