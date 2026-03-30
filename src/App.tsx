@@ -127,7 +127,6 @@ export default function App() {
       setCost(0);
       return;
     }
-    // Only fetch shades if item exists in registry
     if (!allItems.includes(item)) {
       setShades([]);
       return;
@@ -151,7 +150,6 @@ export default function App() {
 
   useEffect(() => {
     if (!item || !shade) return;
-    // Only fetch cost if item exists
     if (!allItems.includes(item)) return;
     fetch(`/api/getCost?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then(res => res.json())
@@ -161,7 +159,6 @@ export default function App() {
 
   useEffect(() => {
     if (!item || !shade) return;
-    // Only fetch price if item and shade exist in system
     if (!allItems.includes(item) || !shades.includes(shade)) return;
     const key = `${item}__${shade}`;
     if (priceCache.current[key]) {
@@ -190,7 +187,6 @@ export default function App() {
 
   const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
 
-  // Fuse instances
   const itemFuse = useMemo(() => new Fuse(allItems, {
     threshold: 0.4,
     distance: 100,
@@ -209,7 +205,6 @@ export default function App() {
     ? itemFuse.search(item)[0]?.item ?? null
     : null;
 
-  // shade suggestion — only suppress pure numbers (e.g. "101"), allow "101 Red"
   const shadeSuggestionRaw = shade
     ? shadeFuse.search(shade)[0]?.item ?? null
     : null;
@@ -228,7 +223,6 @@ export default function App() {
     setTimeout(() => qtyRef.current?.focus(), 50);
   };
 
-  // global keyboard controller
   useEffect(() => {
     const fields = [itemRef, shadeRef, qtyRef, priceRef];
 
@@ -236,7 +230,6 @@ export default function App() {
       const target = e.target as HTMLElement;
       const tag = target.tagName;
 
-      // Arrow Right / Left — move between input fields
       if (e.key === "ArrowRight" && tag === "INPUT") {
         const idx = fields.findIndex(r => r.current === target);
         if (idx !== -1 && idx < fields.length - 1) {
@@ -254,7 +247,6 @@ export default function App() {
         return;
       }
 
-      // Arrow Up / Down — navigate bill table rows (outside inputs)
       if (e.key === "ArrowDown" && tag !== "INPUT") {
         e.preventDefault();
         setSelectedRow(prev => (prev === null ? 0 : Math.min(prev + 1, items.length - 1)));
@@ -266,13 +258,11 @@ export default function App() {
         return;
       }
 
-      // Escape — deselect row
       if (e.key === "Escape") {
         setSelectedRow(null);
         return;
       }
 
-      // Tab — accept autofill suggestion
       if (e.key === "Tab") {
         if (target === itemRef.current && itemSuggestion && item !== itemSuggestion) {
           e.preventDefault();
@@ -288,7 +278,6 @@ export default function App() {
 
       if (e.key !== "Enter") return;
 
-      // Enter on item field
       if (target === itemRef.current) {
         if (itemSuggestion && item !== itemSuggestion) {
           e.preventDefault();
@@ -301,7 +290,6 @@ export default function App() {
         return;
       }
 
-      // Enter on shade field
       if (target === shadeRef.current) {
         if (shadeSuggestion && shade !== shadeSuggestion) {
           e.preventDefault();
@@ -313,21 +301,18 @@ export default function App() {
         return;
       }
 
-      // qty → price
       if (target === qtyRef.current) {
         e.preventDefault();
         priceRef.current?.focus();
         return;
       }
 
-      // price → add item
       if (target === priceRef.current && item && shade && price) {
         e.preventDefault();
         addItem();
         return;
       }
 
-      // global fallback
       if (tag !== "BUTTON" && item && shade && price) {
         e.preventDefault();
         addItem();
@@ -376,7 +361,6 @@ export default function App() {
   const discountPct = pointsDiscount > 0 ? 0 : (applicableSlab?.pct ?? 0);
   const finalTotal = grandTotal - discountAmt;
 
-  // ── Capture bill image ──
   const captureBillImage = async (): Promise<Blob | null> => {
     const billEl = document.getElementById("print-bill");
     if (!billEl) return null;
@@ -431,7 +415,6 @@ export default function App() {
     });
   };
 
-  // ── Save bill ──
   const saveBill = async (): Promise<boolean> => {
     if (items.length === 0 || saving) return false;
     setSaving(true);
@@ -464,7 +447,6 @@ export default function App() {
     }
   };
 
-  // ── Send WhatsApp ──
   const sendWhatsAppWithBlob = async (blob: Blob) => {
     const cleaned = phone.replace(/[^0-9]/g, "");
     if (!cleaned) return;
@@ -492,7 +474,6 @@ export default function App() {
     await sendWhatsAppWithBlob(blob);
   };
 
-  // ── Save & Send ──
   const saveBillAndSend = async () => {
     if (items.length === 0 || saving) return;
 
@@ -517,7 +498,6 @@ export default function App() {
     }
   };
 
-  // ── Save only ──
   const saveBillOnly = async () => {
     const saved = await saveBill();
     if (saved) {
@@ -533,7 +513,6 @@ export default function App() {
     }
   };
 
-  // ── Restock list ──
   const generateRestockList = async () => {
     setRestockLoading(true);
     try {
@@ -555,6 +534,32 @@ export default function App() {
     } catch (err) {
       console.error(err);
       alert("Failed to generate restock list");
+    } finally {
+      setRestockLoading(false);
+    }
+  };
+
+  const generateLoftRestock = async () => {
+    setRestockLoading(true);
+    try {
+      const res = await fetch("/api/generateLoftRestock");
+      const data = await res.json();
+
+      if (!data.message) {
+        alert(data.summary || "No pending transfers.");
+        return;
+      }
+
+      const proceed = window.confirm(
+        `Transfer Summary:\n${data.summary}\n\nOpen WhatsApp to send?`
+      );
+
+      if (proceed && data.waLink) {
+        window.open(data.waLink, "_blank");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate transfer list");
     } finally {
       setRestockLoading(false);
     }
@@ -595,7 +600,6 @@ export default function App() {
         }
       `}</style>
 
-      {/* ---- INPUT AREA ---- */}
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
       <div className="no-print" style={styles.card}>
         <div style={styles.row}>
@@ -651,7 +655,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* ---- BILL AREA ---- */}
       <div id="print-bill" style={styles.billArea}>
         <div style={styles.billHeader}>
           <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
@@ -751,7 +754,6 @@ export default function App() {
         <p style={styles.thankYou}>Thank you for your purchase!</p>
       </div>
 
-      {/* ---- CUSTOMER SECTION ---- */}
       <div className="no-print" style={styles.customerCard}>
         <div style={styles.row}>
           <input
@@ -796,21 +798,34 @@ export default function App() {
         )}
       </div>
 
-      {/* ---- ACTION BUTTONS ---- */}
       <div className="no-print" style={styles.actions}>
         {isAfter8PM && (
-          <button
-            style={{
-              ...styles.printBtn,
-              background: "#e67e22",
-              opacity: restockLoading ? 0.6 : 1,
-              marginRight: "auto",
-            }}
-            onClick={generateRestockList}
-            disabled={restockLoading}
-          >
-            {restockLoading ? "Loading..." : "📋 Restock List"}
-          </button>
+          <>
+            <button
+              style={{
+                ...styles.printBtn,
+                background: "#22e6ae",
+                opacity: restockLoading ? 0.6 : 1,
+                marginRight: "auto",
+              }}
+              onClick={generateRestockList}
+              disabled={restockLoading}
+            >
+              {restockLoading ? "Loading..." : "📋 Store Restock"}
+            </button>
+
+            <button
+              style={{
+                ...styles.printBtn,
+                background: "#45e6e3",
+                opacity: restockLoading ? 0.6 : 1,
+              }}
+              onClick={generateLoftRestock}
+              disabled={restockLoading}
+            >
+              {restockLoading ? "Loading..." : "📦 Loft → Bhiwandi"}
+            </button>
+          </>
         )}
 
         <button
