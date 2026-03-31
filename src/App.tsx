@@ -12,6 +12,13 @@ type BillItem = {
   profit: number;
 };
 
+type RestockPlan = {
+  item: string;
+  message: string;
+  transfers: any[];
+  shortages: any[];
+};
+
 type Slab = { minTotal: number; maxTotal: number; pct: number };
 type Customer = { customerId: string; name: string; phone: string; points: number; totalSpend: number; totalBills: number };
 type PointsConfig = { earnRate: number; redeemRate: number; minRedeem: number };
@@ -35,7 +42,7 @@ export default function App() {
   const [pointsConfig, setPointsConfig] = useState<PointsConfig | null>(null);
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
-  const [restockPlan, setRestockPlan] = useState<any>(null);
+  const [restockPlan, setRestockPlan] = useState<RestockPlan | null>(null);
   const [confirmingTransfer, setConfirmingTransfer] = useState(false);
   const [restockLoading, setRestockLoading] = useState(false);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
@@ -477,71 +484,38 @@ export default function App() {
     await sendWhatsAppWithBlob(blob);
   };
 
-  const waitForRender = () =>
-  new Promise(res => requestAnimationFrame(() => setTimeout(res, 100)));
-
-  // FIXED: saveBillAndSend with guaranteed WhatsApp opening (popup blocker bypass)
-  const saveBillAndSend = async () => {
+const saveBillAndSend = async () => {
   if (items.length === 0 || saving) return;
 
-  const savedPhone = phone;
-  const cleaned = savedPhone.replace(/[^0-9]/g, "");
-  const currentItems = [...items];
-  const currentFinalTotal = finalTotal;
-  const currentBillNo = nextBillNo;
+  const cleaned = phone.replace(/[^0-9]/g, "");
 
-  // Open a blank window immediately (bypass popup blockers)
-  let waWindow: Window | null = null;
-  if (cleaned) {
-    waWindow = window.open("about:blank", "_blank");
-    if (!waWindow) {
-      alert("Please allow popups for this site to open WhatsApp.");
-    }
+  const blob = await captureBillImage();
+  if (!blob) {
+    alert("image failed bro 😐");
+    return;
   }
-  await waitForRender();
-  const blob = savedPhone ? await captureBillImage() : null;
-
 
   let copied = false;
-  if (blob) {
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      copied = true;
-    } catch (err) {
-      console.error(err);
-    }
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    copied = true;
+  } catch (err) {
+    console.error(err);
   }
 
-const saved = await saveBill();
-if (!saved) {
-  waWindow?.close();
-  return;
-}
+  const saved = await saveBill();
+  if (!saved) return;
 
-  await new Promise(r => setTimeout(r, 150));
+  if (cleaned) {
+    window.open(`https://wa.me/${cleaned}`, "_blank");
 
-  if (cleaned && waWindow) {
-    waWindow.location.href = `https://wa.me/${cleaned}`;
-  
     if (copied) {
-      alert("Bill copied! Paste it in WhatsApp.");
-      } else {
-        alert("Copy failed. Screenshot bill. WhatsApp opened.");
-      }
-  }
-  else { 
-    const summary = currentItems.map(i => `${i.item} (${i.shade}) x${i.qty} = ₹${i.total}`).join("\n");
-    const text = `Bill #${currentBillNo}\n${summary}\nTotal: ₹${currentFinalTotal}`;
-    
-    if (waWindow) {
-      waWindow.location.href = `https://wa.me/?text=${encodeURIComponent(text)}`;
-      alert("Image fetch failed. WhatsApp opened with bill summary text. Please attach the bill image manually.");
+      alert("copied 👍 just paste in whatsapp");
     } else {
-      alert("Could not open WhatsApp. Please copy and share the bill manually.");
+      alert("copy failed 💀 download manually");
     }
   }
 
-  // Clear state after everything
   setItems([]);
   setItem("");
   setShade("");
@@ -644,42 +618,49 @@ if (!saved) {
   };
 
   const confirmTransfer = async () => {
-    if (!restockPlan) return;
+  if (!restockPlan) return;
 
-    const confirm = window.confirm(
-      `Confirm physical transfer completed?\n\n${restockPlan.message}`
-    );
-    if (!confirm) return;
+  const confirm = window.confirm(
+    `Confirm physical transfer completed?\n\n${restockPlan.message}`
+  );
+  if (!confirm) return;
 
-    setConfirmingTransfer(true);
+  setConfirmingTransfer(true);
+  try {
+    const res = await fetch("/api/confirmHooksTransfer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        item: restockPlan.item,
+        transfers: restockPlan.transfers,
+        shortages: restockPlan.shortages,
+      }),
+    });
+
+    if (!res.ok) throw new Error("Failed");
+
+    const message = restockPlan.message;
+
+    // optional copy
     try {
-      const res = await fetch("/api/confirmHooksTransfer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          item: restockPlan.item,
-          transfers: restockPlan.transfers,
-          shortages: restockPlan.shortages,
-        }),
-      });
+      await navigator.clipboard.writeText(message);
+      alert("message copied 👍 paste in whatsapp");
+    } catch {}
 
-      if (!res.ok) throw new Error("Failed");
+    setRestockPlan(null);
 
-      alert("Transfer confirmed. Stocks updated.");
-      setRestockPlan(null);
-
-      const cleaned = "+919820467786".replace(/[^0-9]/g, "");
-      window.open(
-        `https://wa.me/${cleaned}?text=${encodeURIComponent(restockPlan.message)}`,
-        "_blank"
-      );
-    } catch (err) {
-      console.error(err);
-      alert("Failed to confirm transfer");
-    } finally {
-      setConfirmingTransfer(false);
-    }
-  };
+    const cleaned = "919820467786";
+    window.open(
+      `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`,
+      "_blank"
+    );
+  } catch (err) {
+    console.error(err);
+    alert("Failed to confirm transfer");
+  } finally {
+    setConfirmingTransfer(false);
+  }
+};
 
   const generateBhiwandiRequests = async () => {
     setRestockLoading(true);
