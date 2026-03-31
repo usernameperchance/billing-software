@@ -491,7 +491,7 @@ const saveBillAndSend = async () => {
 
   const blob = await captureBillImage();
   if (!blob) {
-    alert("image failed bro 😐");
+    alert("Image fetch failed, attach manually in WhatsApp. Bill saved.");
     return;
   }
 
@@ -644,7 +644,7 @@ const saveBillAndSend = async () => {
     // optional copy
     try {
       await navigator.clipboard.writeText(message);
-      alert("message copied 👍 paste in whatsapp");
+      alert("Message copied, ready to paste in WhatsApp.");
     } catch {}
 
     setRestockPlan(null);
