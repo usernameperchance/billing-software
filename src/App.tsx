@@ -85,7 +85,7 @@ export default function App() {
     if (ph.replace(/[^0-9]/g, "").length < 10) { setCustomer(null); return; }
     setFetchingCustomer(true);
     try {
-      const res = await fetch(`/api/getCustomer?phone=${encodeURIComponent(ph.trim())}`);
+      const res = await fetch(`/api/core?action=getCustomer&phone=${encodeURIComponent(ph.trim())}`);
       const data = await res.json();
       setCustomer(data.customer || null);
       if (data.customer?.name) setCustomerName(data.customer.name);
@@ -98,7 +98,7 @@ export default function App() {
   useEffect(() => {
     const cached = sessionStorage.getItem("allItems");
     if (cached) { setAllItems(JSON.parse(cached)); return; }
-    fetch("/api/getItems")
+    fetch("/api/core?action=getItems")
       .then(res => res.json())
       .then(data => {
         setAllItems(data.items || []);
@@ -108,14 +108,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/getDiscounts")
+    fetch("/api/core?action=getDiscounts")
       .then(res => res.json())
       .then(data => setSlabs(data.slabs || []))
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    fetch("/api/getPointsConfig")
+    fetch("/api/core?action=getPointsConfig")
       .then(res => res.json())
       .then(data => setPointsConfig(data.config || null))
       .catch(() => {});
@@ -134,7 +134,7 @@ export default function App() {
       return;
     }
     if (shadeCache.current[item]) { setShades(shadeCache.current[item]); return; }
-    fetch(`/api/getShades?item=${encodeURIComponent(item)}`)
+    fetch(`/api/core?action=getShades&item=${encodeURIComponent(item)}`)
       .then(res => res.json())
       .then(data => {
         const fetched = data.shades || [];
@@ -153,7 +153,7 @@ export default function App() {
   useEffect(() => {
     if (!item || !shade) return;
     if (!allItems.includes(item)) return;
-    fetch(`/api/getCost?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
+    fetch(`/api/core?action=getCost&item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then(res => res.json())
       .then(data => setCost(data.cost || 0))
       .catch(() => setCost(0));
@@ -172,7 +172,7 @@ export default function App() {
       }
       return;
     }
-    fetch(`/api/getPrice?item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
+    fetch(`/api/core?action=getPrice&item=${encodeURIComponent(item)}&shade=${encodeURIComponent(shade)}`)
       .then(res => res.json())
       .then(data => {
         const p = data.price || 0;
@@ -518,7 +518,7 @@ export default function App() {
   const generateRestockList = async () => {
     setRestockLoading(true);
     try {
-      const res = await fetch("/api/restockAll?type=store");
+      const res = await fetch("/api/restock?type=store");
       const data = await res.json();
 
       if (!data.message) {
@@ -544,7 +544,7 @@ export default function App() {
   const generateLoftRestock = async () => {
     setRestockLoading(true);
     try {
-      const res = await fetch("/api/restockAll?type=loft");
+      const res = await fetch("/api/restock?type=loft");
       const data = await res.json();
 
       if (!data.message) {
@@ -587,7 +587,7 @@ export default function App() {
 
   setRestockLoading(true);
   try {
-    const res = await fetch(`/api/hooksRestock?item=${encodeURIComponent(item)}`);
+    const res = await fetch(`/api/restock?type=hooks&item=${encodeURIComponent(item)}`);
     const data = await res.json();
 
     if (!data.transfers || data.transfers.length === 0) {
@@ -647,7 +647,7 @@ const confirmTransfer = async () => {
 const generateBhiwandiRequests = async () => {
   setRestockLoading(true);
   try {
-    const res = await fetch("/api/bhiwandiRequests");
+    const res = await fetch("/api/restock?type=bhiwandi");
     const data = await res.json();
 
     if (!data.message) {
