@@ -426,36 +426,56 @@ export default function App() {
   };
 
   const saveBill = async (): Promise<boolean> => {
-    if (items.length === 0 || saving) return false;
-    setSaving(true);
+  if (items.length === 0 || saving) return false;
+
+  setSaving(true);
+
+  try {
+    const res = await fetch("/api/bill", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        items,
+        discountAmt,
+        discountPct,
+        finalTotal,
+        pointsRedeemed: pointsDiscount,
+        customer: phone ? { name: customerName, phone } : null,
+        earnRate: pointsConfig?.earnRate ?? 0,
+        redeemRate: pointsConfig?.redeemRate ?? 0,
+      }),
+    });
+
+    let data = null;
+
     try {
-      const res = await fetch("/api/bill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items,
-          discountAmt,
-          discountPct,
-          finalTotal,
-          pointsRedeemed: pointsDiscount,
-          customer: phone ? { name: customerName, phone } : null,
-          earnRate: pointsConfig?.earnRate ?? 0,
-          redeemRate: pointsConfig?.redeemRate ?? 0,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
-      priceCache.current = {};
-      fetchNextBillNo();
-      return true;
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save bill");
-      return false;
-    } finally {
-      setSaving(false);
+      data = await res.json();
+    } catch {
+      throw new Error("Invalid server response");
     }
-  };
+
+    if (!res.ok) {
+      throw new Error(data?.error || "Failed to save bill");
+    }
+
+    // reset cache + refresh bill no
+    priceCache.current = {};
+    fetchNextBillNo();
+
+    alert("Bill saved successfully.");
+
+    return true;
+
+  } catch (err: any) {
+    console.error(err);
+    alert(err.message || "Failed to save bill.");
+    return false;
+  } finally {
+    setSaving(false);
+  }
+};
 
   const sendWhatsAppWithBlob = async (blob: Blob) => {
     const cleaned = phone.replace(/[^0-9]/g, "");
