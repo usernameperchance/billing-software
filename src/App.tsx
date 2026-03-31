@@ -203,9 +203,7 @@ export default function App() {
     ? shadeFuse.search(shade)[0]?.item ?? null
     : null;
 
-  const shadeSuggestion = shadeSuggestionRaw && !/^\d+$/.test(shadeSuggestionRaw)
-    ? shadeSuggestionRaw
-    : null;
+  const shadeSuggestion = shadeSuggestionRaw || null;
 
   const selectItem = (val: string) => {
     setItem(val);
