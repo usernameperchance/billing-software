@@ -626,6 +626,7 @@ if (!saved) {
     try {
       const res = await fetch(`/api/restock?type=hooks&item=${encodeURIComponent(item)}`);
       const data = await res.json();
+      console.log(data);
 
       if (!data.transfers || data.transfers.length === 0) {
         alert(data.message || "No restock needed");
