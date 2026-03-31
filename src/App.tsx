@@ -37,18 +37,12 @@ export default function App() {
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
   const [restockPlan, setRestockPlan] = useState<any>(null);
   const [confirmingTransfer, setConfirmingTransfer] = useState(false);
-
-  // restock
   const [restockLoading, setRestockLoading] = useState(false);
-
-  // selected bill row for arrow key navigation
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
 
-  // caches
   const shadeCache = useRef<Record<string, string[]>>({});
   const priceCache = useRef<Record<string, { price: number; qty: number }>>({});
 
-  // focus refs
   const itemRef = useRef<HTMLInputElement>(null);
   const shadeRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
@@ -199,22 +193,17 @@ export default function App() {
     ? itemFuse.search(item)[0]?.item ?? null
     : null;
 
-// If shade input is purely numeric, do exact match - NO fuzzy suggestion
-  const isNumericInput = /^\d+$/.test(shade.trim());
-
+  // FIX 2: Numeric shade input suggests first shade that starts with that number
   let shadeSuggestion = null;
-
-  if (shade && !isNumericInput) {
-    // Only use fuzzy search for non-numeric inputs
-    const fuzzyMatch = shadeFuse.search(shade)[0]?.item ?? null;
-    shadeSuggestion = fuzzyMatch;
-    } else if (shade && isNumericInput) {
-      // For numeric inputs, only suggest if there's an EXACT match
-      const exactMatch = shades.find(s => s.trim() === shade.trim());
-      shadeSuggestion = exactMatch || null;
-      }
-
-  // Also, when pressing Tab, only auto-fill if suggestion exists AND it's not conflicting with numeric input
+  if (shade) {
+    const trimmed = shade.trim();
+    const isNumeric = /^\d+$/.test(trimmed);
+    if (isNumeric) {
+      shadeSuggestion = shades.find(s => s.trim().toLowerCase().startsWith(trimmed.toLowerCase())) || null;
+    } else {
+      shadeSuggestion = shadeFuse.search(shade)[0]?.item ?? null;
+    }
+  }
 
   const selectItem = (val: string) => {
     setItem(val);
@@ -274,11 +263,7 @@ export default function App() {
         }
         if (target === shadeRef.current && shadeSuggestion && shade !== shadeSuggestion) {
           e.preventDefault();
-           // For numeric inputs, only auto-fill if the suggestion is EXACTLY the input
-           const isNumeric = /^\d+$/.test(shade.trim());
-           if (!isNumeric || (isNumeric && shadeSuggestion === shade.trim())) {
-           selectShade(shadeSuggestion);
-           }
+          selectShade(shadeSuggestion);
           return;
         }
       }
@@ -481,40 +466,49 @@ export default function App() {
     await sendWhatsAppWithBlob(blob);
   };
 
+  // FIX 1: Correct saveBillAndSend with proper WhatsApp opening and state clearing
   const saveBillAndSend = async () => {
     if (items.length === 0 || saving) return;
 
-    // Capture BEFORE save (bill still rendered)
     const blob = phone ? await captureBillImage() : null;
-    // Store phone before state clears
     const savedPhone = phone;
 
     const saved = await saveBill();
 
     if (saved) {
-      // Send WhatsApp BEFORE clearing state
-      if (savedPhone && blob) {
+      if (savedPhone) {
         const cleaned = savedPhone.replace(/[^0-9]/g, "");
         if (cleaned) {
-          try {
-            await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-            alert("Bill saved! Image copied to clipboard. Paste it in WhatsApp.");
-          } catch {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `bill-${nextBillNo ?? "draft"}.png`;
-            a.click();
-            URL.revokeObjectURL(url);
-            alert("Bill saved! Image downloaded. Attach it in WhatsApp.");
+          if (blob) {
+            try {
+              await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+              alert("Bill saved! Image copied to clipboard. Paste it in WhatsApp.");
+            } catch {
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `bill-${nextBillNo ?? "draft"}.png`;
+              a.click();
+              URL.revokeObjectURL(url);
+              alert("Bill saved! Image downloaded. Attach it in WhatsApp.");
+            }
+          } else {
+            const summary = items.map(i => `${i.item} ${i.shade} x${i.qty} = ₹${i.total}`).join("\n");
+            const text = `Bill #${nextBillNo}\n${summary}\nTotal: ₹${finalTotal}`;
+            const waUrl = `https://wa.me/${cleaned}?text=${encodeURIComponent(text)}`;
+            window.open(waUrl, "_blank");
+            alert("Bill saved. WhatsApp opened with text summary (image capture failed).");
           }
-          window.open(`https://wa.me/${cleaned}`, "_blank");
+          // Only open blank WhatsApp if we didn't already open a specific text URL
+          if (blob) {
+            window.open(`https://wa.me/${cleaned}`, "_blank");
+          }
         }
       } else {
         alert("Bill saved");
       }
 
-      // Clear state AFTER WhatsApp opens
+      // Clear state after everything
       setItems([]);
       setItem("");
       setShade("");
@@ -608,94 +602,93 @@ export default function App() {
   };
 
   const generateHooksRestock = async () => {
-  const item = window.prompt("Enter item name for restock:");
-  if (!item) return;
+    const item = window.prompt("Enter item name for restock:");
+    if (!item) return;
 
-  setRestockLoading(true);
-  try {
-    const res = await fetch(`/api/restock?type=hooks&item=${encodeURIComponent(item)}`);
-    const data = await res.json();
+    setRestockLoading(true);
+    try {
+      const res = await fetch(`/api/restock?type=hooks&item=${encodeURIComponent(item)}`);
+      const data = await res.json();
 
-    if (!data.transfers || data.transfers.length === 0) {
-      alert(data.message || "No restock needed");
-      return;
+      if (!data.transfers || data.transfers.length === 0) {
+        alert(data.message || "No restock needed");
+        return;
+      }
+
+      setRestockPlan(data);
+      alert(`Restock plan generated. Review and confirm transfer.`);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate restock plan");
+    } finally {
+      setRestockLoading(false);
     }
+  };
 
-    setRestockPlan(data);
-    alert(`Restock plan generated. Review and confirm transfer.`);
-  } catch (err) {
-    console.error(err);
-    alert("Failed to generate restock plan");
-  } finally {
-    setRestockLoading(false);
-  }
-};
+  const confirmTransfer = async () => {
+    if (!restockPlan) return;
 
-const confirmTransfer = async () => {
-  if (!restockPlan) return;
-
-  const confirm = window.confirm(
-    `Confirm physical transfer completed?\n\n${restockPlan.message}`
-  );
-  if (!confirm) return;
-
-  setConfirmingTransfer(true);
-  try {
-    const res = await fetch("/api/confirmHooksTransfer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        item: restockPlan.item,
-        transfers: restockPlan.transfers,
-        shortages: restockPlan.shortages,
-      }),
-    });
-
-    if (!res.ok) throw new Error("Failed");
-
-    alert("Transfer confirmed. Stocks updated.");
-    setRestockPlan(null);
-
-    // Send WhatsApp
-    const cleaned = "+919820467786".replace(/[^0-9]/g, ""); // Replace
-    window.open(
-      `https://wa.me/${cleaned}?text=${encodeURIComponent(restockPlan.message)}`,
-      "_blank"
+    const confirm = window.confirm(
+      `Confirm physical transfer completed?\n\n${restockPlan.message}`
     );
-  } catch (err) {
-    console.error(err);
-    alert("Failed to confirm transfer");
-  } finally {
-    setConfirmingTransfer(false);
-  }
-};
+    if (!confirm) return;
 
-const generateBhiwandiRequests = async () => {
-  setRestockLoading(true);
-  try {
-    const res = await fetch("/api/restock?type=bhiwandi");
-    const data = await res.json();
+    setConfirmingTransfer(true);
+    try {
+      const res = await fetch("/api/confirmHooksTransfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item: restockPlan.item,
+          transfers: restockPlan.transfers,
+          shortages: restockPlan.shortages,
+        }),
+      });
 
-    if (!data.message) {
-      alert(data.summary || "No pending requests");
-      return;
+      if (!res.ok) throw new Error("Failed");
+
+      alert("Transfer confirmed. Stocks updated.");
+      setRestockPlan(null);
+
+      const cleaned = "+919820467786".replace(/[^0-9]/g, "");
+      window.open(
+        `https://wa.me/${cleaned}?text=${encodeURIComponent(restockPlan.message)}`,
+        "_blank"
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to confirm transfer");
+    } finally {
+      setConfirmingTransfer(false);
     }
+  };
 
-    const proceed = window.confirm(
-      `Bhiwandi Request Summary:\n${data.summary}\n\nSend WhatsApp?`
-    );
+  const generateBhiwandiRequests = async () => {
+    setRestockLoading(true);
+    try {
+      const res = await fetch("/api/restock?type=bhiwandi");
+      const data = await res.json();
 
-    if (proceed && data.waLink) {
-      window.open(data.waLink, "_blank");
-      alert("Request sent to Bhiwandi");
+      if (!data.message) {
+        alert(data.summary || "No pending requests");
+        return;
+      }
+
+      const proceed = window.confirm(
+        `Bhiwandi Request Summary:\n${data.summary}\n\nSend WhatsApp?`
+      );
+
+      if (proceed && data.waLink) {
+        window.open(data.waLink, "_blank");
+        alert("Request sent to Bhiwandi");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate Bhiwandi requests");
+    } finally {
+      setRestockLoading(false);
     }
-  } catch (err) {
-    console.error(err);
-    alert("Failed to generate Bhiwandi requests");
-  } finally {
-    setRestockLoading(false);
-  }
-};
+  };
 
   return (
     <div className="app-container" style={styles.container}>
