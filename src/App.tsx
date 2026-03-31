@@ -66,14 +66,6 @@ export default function App() {
     })
   );
 
-  // Check if after 8 PM IST
-  const isAfter8PM = useMemo(() => {
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istTime = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + istOffset);
-    return istTime.getHours() >= 20;
-  }, []);
-
   const fetchNextBillNo = () => {
     fetch("/api/bill")
       .then(res => res.json())
@@ -890,8 +882,6 @@ const generateBhiwandiRequests = async () => {
       </div>
 
       <div className="no-print" style={styles.actions}>
-        {isAfter8PM && (
-          <>
             <button
               style={{
                 ...styles.printBtn,
@@ -916,8 +906,6 @@ const generateBhiwandiRequests = async () => {
             >
               {restockLoading ? "Loading..." : "📦 Loft → Bhiwandi"}
             </button>
-          </>
-        )}
 
         <button
           style={{ ...styles.printBtn, background: "#25D366", opacity: (!phone || items.length === 0) ? 0.5 : 1 }}
