@@ -500,6 +500,15 @@ export default function App() {
   }
   await waitForRender();
   const blob = savedPhone ? await captureBillImage() : null;
+
+  if (blob) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
   const saved = await saveBill();
 
   if (!saved) {
