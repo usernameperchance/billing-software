@@ -377,10 +377,16 @@ export default function App() {
       noPrint.forEach(el => el.style.display = "none");
       const printOnly = billEl.querySelectorAll<HTMLElement>(".print-only");
       printOnly.forEach(el => el.style.display = "inline");
+      await new Promise(r => setTimeout(r, 50));
 
       const canvas = await html2canvas(billEl, {
-        scale: 2, backgroundColor: "#ffffff", useCORS: true, allowTaint: true, logging: false,
-      });
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        imageTimeout: 0
+    });
 
       noPrint.forEach(el => el.style.display = "");
       printOnly.forEach(el => el.style.display = "none");
@@ -471,6 +477,9 @@ export default function App() {
     await sendWhatsAppWithBlob(blob);
   };
 
+  const waitForRender = () =>
+  new Promise(res => requestAnimationFrame(() => setTimeout(res, 100)));
+
   // FIXED: saveBillAndSend with guaranteed WhatsApp opening (popup blocker bypass)
   const saveBillAndSend = async () => {
   if (items.length === 0 || saving) return;
@@ -489,7 +498,7 @@ export default function App() {
       alert("Please allow popups for this site to open WhatsApp.");
     }
   }
-
+  await waitForRender();
   const blob = savedPhone ? await captureBillImage() : null;
   const saved = await saveBill();
 
