@@ -501,57 +501,44 @@ export default function App() {
   await waitForRender();
   const blob = savedPhone ? await captureBillImage() : null;
 
+
+  let copied = false;
   if (blob) {
     try {
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      } catch (err) {
-        console.error(err);
-      }
+      copied = true;
+    } catch (err) {
+      console.error(err);
     }
-
-  const saved = await saveBill();
-
-  if (!saved) {
-    waWindow?.close();
-    alert("Bill save failed. WhatsApp not sent.");
-    return;
   }
 
+const saved = await saveBill();
+if (!saved) {
+  waWindow?.close();
+  return;
+}
+
+  await new Promise(r => setTimeout(r, 150));
+
   if (cleaned && waWindow) {
-    if (blob) {
-      // Copy to clipboard only – no file download
-      try {
-        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-        alert("Bill saved! Image copied to clipboard. Paste it in WhatsApp.");
-      } catch (err) {
-        console.error("Clipboard write failed:", err);
-        alert("Could not copy image to clipboard. Please take a screenshot.");
+    waWindow.location.href = `https://wa.me/${cleaned}`;
+  
+    if (copied) {
+      alert("Bill copied! Paste it in WhatsApp.");
+      } else {
+        alert("Copy failed. Screenshot bill. WhatsApp opened.");
       }
-      waWindow.location.href = `https://wa.me/${cleaned}`;
+  }
+  else { 
+    const summary = currentItems.map(i => `${i.item} (${i.shade}) x${i.qty} = ₹${i.total}`).join("\n");
+    const text = `Bill #${currentBillNo}\n${summary}\nTotal: ₹${currentFinalTotal}`;
+    
+    if (waWindow) {
+      waWindow.location.href = `https://wa.me/?text=${encodeURIComponent(text)}`;
+      alert("Image fetch failed. WhatsApp opened with bill summary text. Please attach the bill image manually.");
     } else {
-      const summary = currentItems.map(i => `${i.item} ${i.shade} x${i.qty} = ₹${i.total}`).join("\n");
-      const text = `Bill #${currentBillNo}\n${summary}\nTotal: ₹${currentFinalTotal}`;
-      waWindow.location.href = `https://wa.me/${cleaned}?text=${encodeURIComponent(text)}`;
-      alert("Bill saved. WhatsApp opened with text summary (image capture failed).");
+      alert("Could not open WhatsApp. Please copy and share the bill manually.");
     }
-  } else if (cleaned && !waWindow) {
-    // Fallback if popup was blocked
-    if (blob) {
-      try {
-        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-        alert("Bill saved! Image copied to clipboard. Paste it in WhatsApp.");
-      } catch {
-        alert("Could not copy image to clipboard. Please take a screenshot.");
-      }
-      window.open(`https://wa.me/${cleaned}`, "_blank");
-    } else {
-      const summary = currentItems.map(i => `${i.item} ${i.shade} x${i.qty} = ₹${i.total}`).join("\n");
-      const text = `Bill #${currentBillNo}\n${summary}\nTotal: ₹${currentFinalTotal}`;
-      window.open(`https://wa.me/${cleaned}?text=${encodeURIComponent(text)}`, "_blank");
-      alert("Bill saved. WhatsApp opened with text summary (image capture failed).");
-    }
-  } else {
-    alert("Bill saved (no phone number provided).");
   }
 
   // Clear state after everything
