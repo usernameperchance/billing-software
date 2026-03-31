@@ -484,16 +484,37 @@ export default function App() {
   const saveBillAndSend = async () => {
     if (items.length === 0 || saving) return;
 
+    // Capture BEFORE save (bill still rendered)
     const blob = phone ? await captureBillImage() : null;
+    // Store phone before state clears
+    const savedPhone = phone;
+
     const saved = await saveBill();
 
     if (saved) {
-      alert("Bill saved");
-
-      if (phone && blob) {
-        await sendWhatsAppWithBlob(blob);
+      // Send WhatsApp BEFORE clearing state
+      if (savedPhone && blob) {
+        const cleaned = savedPhone.replace(/[^0-9]/g, "");
+        if (cleaned) {
+          try {
+            await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+            alert("Bill saved! Image copied to clipboard. Paste it in WhatsApp.");
+          } catch {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `bill-${nextBillNo ?? "draft"}.png`;
+            a.click();
+            URL.revokeObjectURL(url);
+            alert("Bill saved! Image downloaded. Attach it in WhatsApp.");
+          }
+          window.open(`https://wa.me/${cleaned}`, "_blank");
+        }
+      } else {
+        alert("Bill saved");
       }
 
+      // Clear state AFTER WhatsApp opens
       setItems([]);
       setItem("");
       setShade("");
@@ -895,93 +916,106 @@ const generateBhiwandiRequests = async () => {
       </div>
 
       <div className="no-print" style={styles.actions}>
-            <button
-              style={{
-                ...styles.printBtn,
-                background: "#22e6ae",
-                opacity: restockLoading ? 0.6 : 1,
-                marginRight: "auto",
-              }}
-              onClick={generateRestockList}
-              disabled={restockLoading}
-            >
-              {restockLoading ? "Loading..." : "📋 Store Restock"}
-            </button>
+        <button
+          style={{
+            ...styles.printBtn,
+            background: "#3498db",
+            opacity: restockLoading ? 0.6 : 1,
+          }}
+          onClick={generateHooksRestock}
+          disabled={restockLoading}
+        >
+          📋 Restock Hooks
+        </button>
 
-            <button
-              style={{
-                ...styles.printBtn,
-                background: "#45e6e3",
-                opacity: restockLoading ? 0.6 : 1,
-              }}
-              onClick={generateLoftRestock}
-              disabled={restockLoading}
-            >
-              {restockLoading ? "Loading..." : "📦 Loft → Bhiwandi"}
-            </button>
+        {restockPlan && (
+          <button
+            style={{
+              ...styles.printBtn,
+              background: "#27ae60",
+              opacity: confirmingTransfer ? 0.6 : 1,
+            }}
+            onClick={confirmTransfer}
+            disabled={confirmingTransfer}
+          >
+            ✅ Confirm Transfer
+          </button>
+        )}
 
         <button
-          style={{ ...styles.printBtn, background: "#25D366", opacity: (!phone || items.length === 0) ? 0.5 : 1 }}
+          style={{
+            ...styles.printBtn,
+            background: "#237488",
+            opacity: restockLoading ? 0.6 : 1,
+          }}
+          onClick={generateBhiwandiRequests}
+          disabled={restockLoading}
+        >
+          🏭 Bhiwandi Request
+        </button>
+
+        <button
+          style={{
+            ...styles.printBtn,
+            background: "#22e6ae",
+            opacity: restockLoading ? 0.6 : 1,
+          }}
+          onClick={generateRestockList}
+          disabled={restockLoading}
+        >
+          📋 Store Restock
+        </button>
+
+        <button
+          style={{
+            ...styles.printBtn,
+            background: "#45e6e3",
+            opacity: restockLoading ? 0.6 : 1,
+          }}
+          onClick={generateLoftRestock}
+          disabled={restockLoading}
+        >
+          📦 Loft → Bhiwandi
+        </button>
+
+        <button
+          style={{
+            ...styles.printBtn,
+            background: "#25D366",
+            opacity: (!phone || items.length === 0) ? 0.5 : 1,
+          }}
           onClick={sendWhatsApp}
           disabled={!phone || items.length === 0}
         >
           📲 Send Bill
         </button>
-        <button style={styles.printBtn} onClick={() => window.print()}>🖨 Print Bill</button>
+
+        <button style={styles.printBtn} onClick={() => window.print()}>
+          🖨 Print Bill
+        </button>
+
         <button
-          style={{ ...styles.printBtn, opacity: (saving || items.length === 0) ? 0.6 : 1 }}
+          style={{
+            ...styles.printBtn,
+            opacity: (saving || items.length === 0) ? 0.6 : 1,
+          }}
           onClick={saveBillOnly}
           disabled={saving || items.length === 0}
         >
           {saving ? "Saving..." : "💾 Save to Sheets"}
         </button>
+
         <button
-          style={{ ...styles.printBtn, background: "#0a6ed1", opacity: (saving || items.length === 0) ? 0.6 : 1 }}
+          style={{
+            ...styles.printBtn,
+            background: "#0a6ed1",
+            opacity: (saving || items.length === 0) ? 0.6 : 1,
+          }}
           onClick={saveBillAndSend}
           disabled={saving || items.length === 0}
         >
           {saving ? "Saving..." : "💾📲 Save & Send"}
         </button>
-        <div className="no-print" style={styles.actions}>
-  <button
-    style={{
-      ...styles.printBtn,
-      background: "#3498db",
-      opacity: restockLoading ? 0.6 : 1,
-      marginRight: "auto",
-    }}
-    onClick={generateHooksRestock}
-    disabled={restockLoading}
-  >
-    📋 Restock Hooks
-  </button>
-
-  {restockPlan && (
-    <button
-      style={{
-        ...styles.printBtn,
-        background: "#27ae60",
-        opacity: confirmingTransfer ? 0.6 : 1,
-      }}
-      onClick={confirmTransfer}
-      disabled={confirmingTransfer}
-    >
-      ✅ Confirm Transfer
-    </button>
-  )}
-
-  <button
-    style={{
-      ...styles.printBtn,
-      background: "#e67e22",
-      opacity: restockLoading ? 0.6 : 1,
-    }}
-    onClick={generateBhiwandiRequests}
-    disabled={restockLoading}
-  >
-    🏭 Bhiwandi Request
-  </button>
-</div>
       </div>
     </div>
   );

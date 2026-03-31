@@ -86,12 +86,36 @@ async function handleGetPrice(gsapi: any, req: VercelRequest, res: VercelRespons
   });
 
   const rows = response.data.values || [];
-  const matchedRow = rows.find((r: any) => {
-    const rowShade = r[0]?.toString().trim().toLowerCase();
-    const targetShade = shade.toString().trim().toLowerCase();
-    return rowShade === targetShade;
-  });
-  
+  const target = shade.toString().trim().toLowerCase();
+
+  // Priority 1: Exact match
+  let matchedRow = rows.find((r: any) =>
+    r[0]?.toString().trim().toLowerCase() === target
+  );
+
+  // Priority 2: Shade starts with the input (e.g., "101" matches "101 Red")
+  if (!matchedRow) {
+    matchedRow = rows.find((r: any) =>
+      r[0]?.toString().trim().toLowerCase().startsWith(target)
+    );
+  }
+
+  // Priority 3: Input starts with shade (e.g., "101 Red" matches "101")
+  if (!matchedRow) {
+    matchedRow = rows.find((r: any) => {
+      const rowShade = r[0]?.toString().trim().toLowerCase();
+      return target.startsWith(rowShade);
+    });
+  }
+
+  // Priority 4: Contains match (e.g., "Red" matches "101 Red")
+  if (!matchedRow) {
+    matchedRow = rows.find((r: any) =>
+      r[0]?.toString().trim().toLowerCase().includes(target) ||
+      target.includes(r[0]?.toString().trim().toLowerCase())
+    );
+  }
+
   const price = matchedRow && matchedRow[2] ? Number(matchedRow[2]) : 0;
   const qty = matchedRow && matchedRow[1] ? Number(matchedRow[1]) : 0;
 
