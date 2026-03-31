@@ -193,17 +193,21 @@ export default function App() {
     ? itemFuse.search(item)[0]?.item ?? null
     : null;
 
-  // FIX 2: Numeric shade input suggests first shade that starts with that number
+  // NEW: Detect if all shades are purely numeric (e.g., "101", "102")
+  const allShadesAreNumeric = shades.length > 0 && shades.every(s => /^\d+$/.test(s.trim()));
+
   let shadeSuggestion = null;
-  if (shade) {
+  if (shade && !allShadesAreNumeric) {
     const trimmed = shade.trim();
     const isNumeric = /^\d+$/.test(trimmed);
     if (isNumeric) {
+      // For non‑numeric shades list, numeric input suggests first shade starting with that number
       shadeSuggestion = shades.find(s => s.trim().toLowerCase().startsWith(trimmed.toLowerCase())) || null;
     } else {
       shadeSuggestion = shadeFuse.search(shade)[0]?.item ?? null;
     }
   }
+  // If all shades are numeric, shadeSuggestion remains null (no ghost autofill)
 
   const selectItem = (val: string) => {
     setItem(val);
@@ -261,7 +265,8 @@ export default function App() {
           selectItem(itemSuggestion);
           return;
         }
-        if (target === shadeRef.current && shadeSuggestion && shade !== shadeSuggestion) {
+        // Only auto‑fill shade if a suggestion exists AND not all shades are numeric
+        if (target === shadeRef.current && shadeSuggestion && shade !== shadeSuggestion && !allShadesAreNumeric) {
           e.preventDefault();
           selectShade(shadeSuggestion);
           return;
@@ -283,7 +288,7 @@ export default function App() {
       }
 
       if (target === shadeRef.current) {
-        if (shadeSuggestion && shade !== shadeSuggestion) {
+        if (shadeSuggestion && shade !== shadeSuggestion && !allShadesAreNumeric) {
           e.preventDefault();
           selectShade(shadeSuggestion);
         } else if (shade) {
@@ -313,7 +318,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems]);
+  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric]);
 
   const addItem = () => {
     if (!item || !shade || !price) return;
@@ -466,58 +471,77 @@ export default function App() {
     await sendWhatsAppWithBlob(blob);
   };
 
-  // FIX 1: Correct saveBillAndSend with proper WhatsApp opening and state clearing
+  // FIXED: saveBillAndSend with guaranteed WhatsApp opening (popup blocker bypass)
   const saveBillAndSend = async () => {
     if (items.length === 0 || saving) return;
 
-    const blob = phone ? await captureBillImage() : null;
     const savedPhone = phone;
+    const cleaned = savedPhone.replace(/[^0-9]/g, "");
+    const currentItems = [...items];
+    const currentFinalTotal = finalTotal;
+    const currentBillNo = nextBillNo;
 
+    // Open a blank window immediately (bypass popup blockers)
+    let waWindow: Window | null = null;
+    if (cleaned) {
+      waWindow = window.open("about:blank", "_blank");
+      if (!waWindow) {
+        alert("Please allow popups for this site to open WhatsApp.");
+      }
+    }
+
+    const blob = savedPhone ? await captureBillImage() : null;
     const saved = await saveBill();
 
-    if (saved) {
-      if (savedPhone) {
-        const cleaned = savedPhone.replace(/[^0-9]/g, "");
-        if (cleaned) {
-          if (blob) {
-            try {
-              await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-              alert("Bill saved! Image copied to clipboard. Paste it in WhatsApp.");
-            } catch {
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `bill-${nextBillNo ?? "draft"}.png`;
-              a.click();
-              URL.revokeObjectURL(url);
-              alert("Bill saved! Image downloaded. Attach it in WhatsApp.");
-            }
-          } else {
-            const summary = items.map(i => `${i.item} ${i.shade} x${i.qty} = ₹${i.total}`).join("\n");
-            const text = `Bill #${nextBillNo}\n${summary}\nTotal: ₹${finalTotal}`;
-            const waUrl = `https://wa.me/${cleaned}?text=${encodeURIComponent(text)}`;
-            window.open(waUrl, "_blank");
-            alert("Bill saved. WhatsApp opened with text summary (image capture failed).");
-          }
-          // Only open blank WhatsApp if we didn't already open a specific text URL
-          if (blob) {
-            window.open(`https://wa.me/${cleaned}`, "_blank");
-          }
-        }
-      } else {
-        alert("Bill saved");
-      }
-
-      // Clear state after everything
-      setItems([]);
-      setItem("");
-      setShade("");
-      setSelectedRow(null);
-      setCustomer(null);
-      setCustomerName("");
-      setPhone("");
-      setRedeemPoints(false);
+    if (!saved) {
+      waWindow?.close();
+      alert("Bill save failed. WhatsApp not sent.");
+      return;
     }
+
+    if (cleaned && waWindow) {
+      if (blob) {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+          alert("Bill saved! Image copied to clipboard. Paste it in WhatsApp.");
+        } catch {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `bill-${currentBillNo ?? "draft"}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+          alert("Bill saved! Image downloaded. Attach it in WhatsApp.");
+        }
+        waWindow.location.href = `https://wa.me/${cleaned}`;
+      } else {
+        const summary = currentItems.map(i => `${i.item} ${i.shade} x${i.qty} = ₹${i.total}`).join("\n");
+        const text = `Bill #${currentBillNo}\n${summary}\nTotal: ₹${currentFinalTotal}`;
+        waWindow.location.href = `https://wa.me/${cleaned}?text=${encodeURIComponent(text)}`;
+        alert("Bill saved. WhatsApp opened with text summary (image capture failed).");
+      }
+    } else if (cleaned && !waWindow) {
+      // Fallback: normal window.open (may be blocked)
+      if (blob) {
+        window.open(`https://wa.me/${cleaned}`, "_blank");
+      } else {
+        const summary = currentItems.map(i => `${i.item} ${i.shade} x${i.qty} = ₹${i.total}`).join("\n");
+        const text = `Bill #${currentBillNo}\n${summary}\nTotal: ₹${currentFinalTotal}`;
+        window.open(`https://wa.me/${cleaned}?text=${encodeURIComponent(text)}`, "_blank");
+      }
+    } else {
+      alert("Bill saved (no phone number provided).");
+    }
+
+    // Clear state after everything
+    setItems([]);
+    setItem("");
+    setShade("");
+    setSelectedRow(null);
+    setCustomer(null);
+    setCustomerName("");
+    setPhone("");
+    setRedeemPoints(false);
   };
 
   const saveBillOnly = async () => {
