@@ -199,11 +199,22 @@ export default function App() {
     ? itemFuse.search(item)[0]?.item ?? null
     : null;
 
-  const shadeSuggestionRaw = shade
-    ? shadeFuse.search(shade)[0]?.item ?? null
-    : null;
+// If shade input is purely numeric, do exact match - NO fuzzy suggestion
+  const isNumericInput = /^\d+$/.test(shade.trim());
 
-  const shadeSuggestion = shadeSuggestionRaw || null;
+  let shadeSuggestion = null;
+
+  if (shade && !isNumericInput) {
+    // Only use fuzzy search for non-numeric inputs
+    const fuzzyMatch = shadeFuse.search(shade)[0]?.item ?? null;
+    shadeSuggestion = fuzzyMatch;
+    } else if (shade && isNumericInput) {
+      // For numeric inputs, only suggest if there's an EXACT match
+      const exactMatch = shades.find(s => s.trim() === shade.trim());
+      shadeSuggestion = exactMatch || null;
+      }
+
+  // Also, when pressing Tab, only auto-fill if suggestion exists AND it's not conflicting with numeric input
 
   const selectItem = (val: string) => {
     setItem(val);
@@ -263,7 +274,11 @@ export default function App() {
         }
         if (target === shadeRef.current && shadeSuggestion && shade !== shadeSuggestion) {
           e.preventDefault();
-          selectShade(shadeSuggestion);
+           // For numeric inputs, only auto-fill if the suggestion is EXACTLY the input
+           const isNumeric = /^\d+$/.test(shade.trim());
+           if (!isNumeric || (isNumeric && shadeSuggestion === shade.trim())) {
+           selectShade(shadeSuggestion);
+           }
           return;
         }
       }
