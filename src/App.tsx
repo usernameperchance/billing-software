@@ -67,6 +67,9 @@ export default function App() {
     })
   );
 
+  // Phone validation helper
+  const isPhoneValid = phone.replace(/[^0-9]/g, "").length === 10;
+
   const fetchNextBillNo = () => {
     fetch("/api/bill")
       .then(res => res.json())
@@ -200,7 +203,6 @@ export default function App() {
     ? itemFuse.search(item)[0]?.item ?? null
     : null;
 
-  // NEW: Detect if all shades are purely numeric (e.g., "101", "102")
   const allShadesAreNumeric = shades.length > 0 && shades.every(s => /^\d+$/.test(s.trim()));
 
   let shadeSuggestion = null;
@@ -208,13 +210,11 @@ export default function App() {
     const trimmed = shade.trim();
     const isNumeric = /^\d+$/.test(trimmed);
     if (isNumeric) {
-      // For non‑numeric shades list, numeric input suggests first shade starting with that number
       shadeSuggestion = shades.find(s => s.trim().toLowerCase().startsWith(trimmed.toLowerCase())) || null;
     } else {
       shadeSuggestion = shadeFuse.search(shade)[0]?.item ?? null;
     }
   }
-  // If all shades are numeric, shadeSuggestion remains null (no ghost autofill)
 
   const selectItem = (val: string) => {
     setItem(val);
@@ -272,7 +272,6 @@ export default function App() {
           selectItem(itemSuggestion);
           return;
         }
-        // Only auto‑fill shade if a suggestion exists AND not all shades are numeric
         if (target === shadeRef.current && shadeSuggestion && shade !== shadeSuggestion && !allShadesAreNumeric) {
           e.preventDefault();
           selectShade(shadeSuggestion);
@@ -426,56 +425,58 @@ export default function App() {
   };
 
   const saveBill = async (): Promise<boolean> => {
-  if (items.length === 0 || saving) return false;
+    if (items.length === 0 || saving) return false;
+    if (!isPhoneValid) {
+      alert("Please enter a valid 10-digit customer phone number before saving.");
+      return false;
+    }
 
-  setSaving(true);
-
-  try {
-    const res = await fetch("/api/bill", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        items,
-        discountAmt,
-        discountPct,
-        finalTotal,
-        pointsRedeemed: pointsDiscount,
-        customer: phone ? { name: customerName, phone } : null,
-        earnRate: pointsConfig?.earnRate ?? 0,
-        redeemRate: pointsConfig?.redeemRate ?? 0,
-      }),
-    });
-
-    let data = null;
+    setSaving(true);
 
     try {
-      data = await res.json();
-    } catch {
-      throw new Error("Invalid server response");
+      const res = await fetch("/api/bill", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          items,
+          discountAmt,
+          discountPct,
+          finalTotal,
+          pointsRedeemed: pointsDiscount,
+          customer: phone ? { name: customerName, phone } : null,
+          earnRate: pointsConfig?.earnRate ?? 0,
+          redeemRate: pointsConfig?.redeemRate ?? 0,
+        }),
+      });
+
+      let data = null;
+
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("Invalid server response");
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to save bill");
+      }
+
+      priceCache.current = {};
+      fetchNextBillNo();
+
+      alert("Bill saved successfully.");
+      return true;
+
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to save bill.");
+      return false;
+    } finally {
+      setSaving(false);
     }
-
-    if (!res.ok) {
-      throw new Error(data?.error || "Failed to save bill");
-    }
-
-    // reset cache + refresh bill no
-    priceCache.current = {};
-    fetchNextBillNo();
-
-    alert("Bill saved successfully.");
-
-    return true;
-
-  } catch (err: any) {
-    console.error(err);
-    alert(err.message || "Failed to save bill.");
-    return false;
-  } finally {
-    setSaving(false);
-  }
-};
+  };
 
   const sendWhatsAppWithBlob = async (blob: Blob) => {
     const cleaned = phone.replace(/[^0-9]/g, "");
@@ -499,52 +500,60 @@ export default function App() {
 
   const sendWhatsApp = async () => {
     if (!phone || items.length === 0) return;
+    if (!isPhoneValid) {
+      alert("Invalid phone number. Please enter a 10-digit number.");
+      return;
+    }
     const blob = await captureBillImage();
     if (!blob) { alert("Failed to capture bill image."); return; }
     await sendWhatsAppWithBlob(blob);
   };
 
-const saveBillAndSend = async () => {
-  if (items.length === 0 || saving) return;
-
-  const cleaned = phone.replace(/[^0-9]/g, "");
-
-  const blob = await captureBillImage();
-  if (!blob) {
-    alert("Image fetch failed, attach manually in WhatsApp. Bill saved.");
-    return;
-  }
-
-  let copied = false;
-  try {
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-    copied = true;
-  } catch (err) {
-    console.error(err);
-  }
-
-  const saved = await saveBill();
-  if (!saved) return;
-
-  if (cleaned) {
-    window.open(`https://wa.me/${cleaned}`, "_blank");
-
-    if (copied) {
-      alert("copied 👍 just paste in whatsapp");
-    } else {
-      alert("copy failed 💀 download manually");
+  const saveBillAndSend = async () => {
+    if (items.length === 0 || saving) return;
+    if (!isPhoneValid) {
+      alert("Please enter a valid 10-digit customer phone number.");
+      return;
     }
-  }
 
-  setItems([]);
-  setItem("");
-  setShade("");
-  setSelectedRow(null);
-  setCustomer(null);
-  setCustomerName("");
-  setPhone("");
-  setRedeemPoints(false);
-};
+    const cleaned = phone.replace(/[^0-9]/g, "");
+
+    const blob = await captureBillImage();
+    if (!blob) {
+      alert("Image fetch failed, attach manually in WhatsApp. Bill saved.");
+      return;
+    }
+
+    let copied = false;
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      copied = true;
+    } catch (err) {
+      console.error(err);
+    }
+
+    const saved = await saveBill();
+    if (!saved) return;
+
+    if (cleaned) {
+      window.open(`https://wa.me/${cleaned}`, "_blank");
+
+      if (copied) {
+        alert("copied 👍 just paste in whatsapp");
+      } else {
+        alert("copy failed 💀 download manually");
+      }
+    }
+
+    setItems([]);
+    setItem("");
+    setShade("");
+    setSelectedRow(null);
+    setCustomer(null);
+    setCustomerName("");
+    setPhone("");
+    setRedeemPoints(false);
+  };
 
   const generateRestockList = async () => {
     setRestockLoading(true);
@@ -638,49 +647,48 @@ const saveBillAndSend = async () => {
   };
 
   const confirmTransfer = async () => {
-  if (!restockPlan) return;
+    if (!restockPlan) return;
 
-  const confirm = window.confirm(
-    `Confirm physical transfer completed?\n\n${restockPlan.message}`
-  );
-  if (!confirm) return;
-
-  setConfirmingTransfer(true);
-  try {
-    const res = await fetch("/api/confirmHooksTransfer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        item: restockPlan.item,
-        transfers: restockPlan.transfers,
-        shortages: restockPlan.shortages,
-      }),
-    });
-
-    if (!res.ok) throw new Error("Failed");
-
-    const message = restockPlan.message;
-
-    // optional copy
-    try {
-      await navigator.clipboard.writeText(message);
-      alert("Message copied, ready to paste in WhatsApp.");
-    } catch {}
-
-    setRestockPlan(null);
-
-    const cleaned = "919820467786";
-    window.open(
-      `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`,
-      "_blank"
+    const confirm = window.confirm(
+      `Confirm physical transfer completed?\n\n${restockPlan.message}`
     );
-  } catch (err) {
-    console.error(err);
-    alert("Failed to confirm transfer");
-  } finally {
-    setConfirmingTransfer(false);
-  }
-};
+    if (!confirm) return;
+
+    setConfirmingTransfer(true);
+    try {
+      const res = await fetch("/api/confirmHooksTransfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item: restockPlan.item,
+          transfers: restockPlan.transfers,
+          shortages: restockPlan.shortages,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed");
+
+      const message = restockPlan.message;
+
+      try {
+        await navigator.clipboard.writeText(message);
+        alert("Message copied, ready to paste in WhatsApp.");
+      } catch {}
+
+      setRestockPlan(null);
+
+      const cleaned = "919820467786";
+      window.open(
+        `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`,
+        "_blank"
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to confirm transfer");
+    } finally {
+      setConfirmingTransfer(false);
+    }
+  };
 
   const generateBhiwandiRequests = async () => {
     setRestockLoading(true);
@@ -902,6 +910,9 @@ const saveBillAndSend = async () => {
           />
           {fetchingCustomer && <span style={{ fontSize: 13, color: "#888" }}>Looking up...</span>}
         </div>
+        {!isPhoneValid && phone.trim().length > 0 && (
+          <div style={{ fontSize: 12, color: "#cc3333", marginTop: 4 }}>Enter a valid 10-digit phone number</div>
+        )}
         {customer && (
           <div style={styles.customerInfo}>
             <span>👤 {customer.name} — {customer.points} pts</span>
@@ -994,10 +1005,10 @@ const saveBillAndSend = async () => {
           style={{
             ...styles.printBtn,
             background: "#25D366",
-            opacity: (!phone || items.length === 0) ? 0.5 : 1,
+            opacity: (!isPhoneValid || items.length === 0) ? 0.5 : 1,
           }}
           onClick={sendWhatsApp}
-          disabled={!phone || items.length === 0}
+          disabled={!isPhoneValid || items.length === 0}
         >
           📲 Send Bill
         </button>
@@ -1009,10 +1020,10 @@ const saveBillAndSend = async () => {
         <button
           style={{
             ...styles.printBtn,
-            opacity: (saving || items.length === 0) ? 0.6 : 1,
+            opacity: (saving || items.length === 0 || !isPhoneValid) ? 0.6 : 1,
           }}
           onClick={saveBill}
-          disabled={saving || items.length === 0}
+          disabled={saving || items.length === 0 || !isPhoneValid}
         >
           {saving ? "Saving..." : "💾 Save to Sheets"}
         </button>
@@ -1021,10 +1032,10 @@ const saveBillAndSend = async () => {
           style={{
             ...styles.printBtn,
             background: "#0a6ed1",
-            opacity: (saving || items.length === 0) ? 0.6 : 1,
+            opacity: (saving || items.length === 0 || !isPhoneValid) ? 0.6 : 1,
           }}
           onClick={saveBillAndSend}
-          disabled={saving || items.length === 0}
+          disabled={saving || items.length === 0 || !isPhoneValid}
         >
           {saving ? "Saving..." : "💾📲 Save & Send"}
         </button>

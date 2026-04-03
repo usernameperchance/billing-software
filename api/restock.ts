@@ -10,7 +10,7 @@ const auth = new google.auth.GoogleAuth({
 const STORE_SHEET_ID = process.env.SHEET_ID!;
 const LOFT_SHEET_ID = process.env.LOFT_SHEET_ID!;
 const GODOWN_SHEET_ID = process.env.GODOWN_SHEET_ID!;
-const RESTOCK_PHONE = "919820467786"; // Keep as is
+const RESTOCK_PHONE = "9820467786"; // Keep as is
 
 const LOW_STOCK_THRESHOLD = 2;
 
