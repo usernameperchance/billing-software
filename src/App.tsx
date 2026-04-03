@@ -12,13 +12,6 @@ type BillItem = {
   profit: number;
 };
 
-type RestockPlan = {
-  item: string;
-  message: string;
-  transfers: any[];
-  shortages: any[];
-};
-
 type Slab = { minTotal: number; maxTotal: number; pct: number };
 type Customer = { customerId: string; name: string; phone: string; points: number; totalSpend: number; totalBills: number };
 type PointsConfig = { earnRate: number; redeemRate: number; minRedeem: number };
@@ -42,8 +35,6 @@ export default function App() {
   const [pointsConfig, setPointsConfig] = useState<PointsConfig | null>(null);
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
-  const [restockPlan, setRestockPlan] = useState<RestockPlan | null>(null);
-  const [confirmingTransfer, setConfirmingTransfer] = useState(false);
   const [restockLoading, setRestockLoading] = useState(false);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
 
@@ -67,7 +58,6 @@ export default function App() {
     })
   );
 
-  // Phone validation helper
   const isPhoneValid = phone.replace(/[^0-9]/g, "").length === 10;
 
   const fetchNextBillNo = () => {
@@ -555,7 +545,7 @@ export default function App() {
     setRedeemPoints(false);
   };
 
-  const generateRestockList = async () => {
+  const generateStoreRestock = async () => {
     setRestockLoading(true);
     try {
       const res = await fetch("/api/restock?type=store");
@@ -578,115 +568,6 @@ export default function App() {
       alert("Failed to generate restock list");
     } finally {
       setRestockLoading(false);
-    }
-  };
-
-  const generateLoftRestock = async () => {
-    setRestockLoading(true);
-    try {
-      const res = await fetch("/api/restock?type=loft");
-      const data = await res.json();
-
-      if (!data.message) {
-        alert(data.summary || "No pending transfers.");
-        return;
-      }
-
-      const proceed = window.confirm(
-        `Transfer Summary:\n${data.summary}\n\nOpen WhatsApp to send?`
-      );
-
-      if (proceed && data.waLink) {
-        window.open(data.waLink, "_blank");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to generate transfer list");
-    } finally {
-      setRestockLoading(false);
-    }
-  };
-
-  const updateQty = (idx: number, newQty: number) => {
-    if (newQty < 1) return;
-    const updated = [...items];
-    updated[idx].qty = newQty;
-    updated[idx].total = newQty * updated[idx].price;
-    updated[idx].profit = (updated[idx].price - updated[idx].cost) * newQty;
-    setItems(updated);
-  };
-
-  const removeItem = (idx: number) => {
-    setItems(items.filter((_, i) => i !== idx));
-    setSelectedRow(null);
-  };
-
-  const generateHooksRestock = async () => {
-    const item = window.prompt("Enter item name for restock:");
-    if (!item) return;
-
-    setRestockLoading(true);
-    try {
-      const res = await fetch(`/api/restock?type=hooks&item=${encodeURIComponent(item)}`);
-      const data = await res.json();
-      console.log(data);
-
-      if (!data.transfers || data.transfers.length === 0) {
-        alert(data.message || "No restock needed");
-        return;
-      }
-
-      setRestockPlan(data);
-      alert(`Restock plan generated. Review and confirm transfer.`);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to generate restock plan");
-    } finally {
-      setRestockLoading(false);
-    }
-  };
-
-  const confirmTransfer = async () => {
-    if (!restockPlan) return;
-
-    const confirm = window.confirm(
-      `Confirm physical transfer completed?\n\n${restockPlan.message}`
-    );
-    if (!confirm) return;
-
-    setConfirmingTransfer(true);
-    try {
-      const res = await fetch("/api/confirmHooksTransfer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          item: restockPlan.item,
-          transfers: restockPlan.transfers,
-          shortages: restockPlan.shortages,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed");
-
-      const message = restockPlan.message;
-
-      try {
-        await navigator.clipboard.writeText(message);
-        alert("Message copied, ready to paste in WhatsApp.");
-      } catch {}
-
-      setRestockPlan(null);
-
-      const cleaned = "919820467786";
-      window.open(
-        `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`,
-        "_blank"
-      );
-    } catch (err) {
-      console.error(err);
-      alert("Failed to confirm transfer");
-    } finally {
-      setConfirmingTransfer(false);
     }
   };
 
@@ -715,6 +596,20 @@ export default function App() {
     } finally {
       setRestockLoading(false);
     }
+  };
+
+  const updateQty = (idx: number, newQty: number) => {
+    if (newQty < 1) return;
+    const updated = [...items];
+    updated[idx].qty = newQty;
+    updated[idx].total = newQty * updated[idx].price;
+    updated[idx].profit = (updated[idx].price - updated[idx].cost) * newQty;
+    setItems(updated);
+  };
+
+  const removeItem = (idx: number) => {
+    setItems(items.filter((_, i) => i !== idx));
+    setSelectedRow(null);
   };
 
   return (
@@ -942,28 +837,14 @@ export default function App() {
         <button
           style={{
             ...styles.printBtn,
-            background: "#3498db",
+            background: "#22e6ae",
             opacity: restockLoading ? 0.6 : 1,
           }}
-          onClick={generateHooksRestock}
+          onClick={generateStoreRestock}
           disabled={restockLoading}
         >
-          📋 Restock Hooks
+          📋 Store Restock (WhatsApp)
         </button>
-
-        {restockPlan && (
-          <button
-            style={{
-              ...styles.printBtn,
-              background: "#27ae60",
-              opacity: confirmingTransfer ? 0.6 : 1,
-            }}
-            onClick={confirmTransfer}
-            disabled={confirmingTransfer}
-          >
-            ✅ Confirm Transfer
-          </button>
-        )}
 
         <button
           style={{
@@ -975,30 +856,6 @@ export default function App() {
           disabled={restockLoading}
         >
           🏭 Bhiwandi Request
-        </button>
-
-        <button
-          style={{
-            ...styles.printBtn,
-            background: "#22e6ae",
-            opacity: restockLoading ? 0.6 : 1,
-          }}
-          onClick={generateRestockList}
-          disabled={restockLoading}
-        >
-          📋 Store Restock
-        </button>
-
-        <button
-          style={{
-            ...styles.printBtn,
-            background: "#45e6e3",
-            opacity: restockLoading ? 0.6 : 1,
-          }}
-          onClick={generateLoftRestock}
-          disabled={restockLoading}
-        >
-          📦 Loft → Bhiwandi
         </button>
 
         <button
