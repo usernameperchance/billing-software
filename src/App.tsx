@@ -571,33 +571,6 @@ export default function App() {
     }
   };
 
-  const generateBhiwandiRequests = async () => {
-    setRestockLoading(true);
-    try {
-      const res = await fetch("/api/restock?type=bhiwandi");
-      const data = await res.json();
-
-      if (!data.message) {
-        alert(data.summary || "No pending requests");
-        return;
-      }
-
-      const proceed = window.confirm(
-        `Bhiwandi Request Summary:\n${data.summary}\n\nSend WhatsApp?`
-      );
-
-      if (proceed && data.waLink) {
-        window.open(data.waLink, "_blank");
-        alert("Request sent to Bhiwandi");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to generate Bhiwandi requests");
-    } finally {
-      setRestockLoading(false);
-    }
-  };
-
   const updateQty = (idx: number, newQty: number) => {
     if (newQty < 1) return;
     const updated = [...items];
@@ -845,19 +818,7 @@ export default function App() {
         >
           📋 Store Restock (WhatsApp)
         </button>
-
-        <button
-          style={{
-            ...styles.printBtn,
-            background: "#237488",
-            opacity: restockLoading ? 0.6 : 1,
-          }}
-          onClick={generateBhiwandiRequests}
-          disabled={restockLoading}
-        >
-          🏭 Bhiwandi Request
-        </button>
-
+        
         <button
           style={{
             ...styles.printBtn,
