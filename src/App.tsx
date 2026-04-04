@@ -546,13 +546,24 @@ export default function App() {
   };
 
   const generateStoreRestock = async () => {
+    const input = window.prompt(
+      "Enter item name to restock (e.g., 'Kajal'), or type 'all' for full low-stock list:"
+    );
+    if (!input || input.trim() === "") return;
+
+    const item = input.trim();
     setRestockLoading(true);
     try {
-      const res = await fetch("/api/restock?type=store");
+      const res = await fetch(`/api/restock?type=store&item=${encodeURIComponent(item)}`);
       const data = await res.json();
 
+      if (!res.ok) {
+        alert(data.error || "Failed to generate restock");
+        return;
+      }
+
       if (!data.message) {
-        alert(data.summary || "No restock needed today.");
+        alert(data.summary || `No restock needed.`);
         return;
       }
 
@@ -818,7 +829,7 @@ export default function App() {
         >
           📋 Store Restock (WhatsApp)
         </button>
-        
+
         <button
           style={{
             ...styles.printBtn,
