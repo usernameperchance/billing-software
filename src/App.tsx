@@ -485,7 +485,12 @@ export default function App() {
       alert("Bill image downloaded. Attach it in WhatsApp.");
     }
 
-    window.open(`https://wa.me/${cleaned}`, "_blank");
+      const waLink = `https://wa.me/${cleaned}`;
+      const anchor = document.createElement("a");
+      anchor.href = waLink;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.click();
   };
 
   const sendWhatsApp = async () => {
@@ -526,12 +531,17 @@ export default function App() {
     if (!saved) return;
 
     if (cleaned) {
-      window.open(`https://wa.me/${cleaned}`, "_blank");
+      const waLink = `https://wa.me/${cleaned}`;
+      const anchor = document.createElement("a");
+      anchor.href = waLink;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.click();
 
       if (copied) {
-        alert("copied 👍 just paste in whatsapp");
+        alert("Bill copied. Paste it in WhatsApp.");
       } else {
-        alert("copy failed 💀 download manually");
+        alert("Failed to copy image. Please attach the downloaded bill image in WhatsApp.");
       }
     }
 
@@ -547,7 +557,7 @@ export default function App() {
 
   const generateStoreRestock = async () => {
     const input = window.prompt(
-      "Enter item name to restock (e.g., 'Kajal'), or type 'all' for full low-stock list:"
+      "Enter item name to restock (e.g., 'magnus'), or type 'all' for full low-stock list:"
     );
     if (!input || input.trim() === "") return;
 
@@ -572,7 +582,7 @@ export default function App() {
       );
 
       if (proceed && data.waLink) {
-        window.open(data.waLink, "_blank");
+        window.location.href = data.waLink;
       }
     } catch (err) {
       console.error(err);
