@@ -582,7 +582,11 @@ export default function App() {
       );
 
       if (proceed && data.waLink) {
-        window.location.href = data.waLink;
+        const anchor = document.createElement("a");
+        anchor.href = data.waLink;
+        anchor.target = "_blank";
+        anchor.rel = "noopener noreferrer";
+        anchor.click();
       }
     } catch (err) {
       console.error(err);
