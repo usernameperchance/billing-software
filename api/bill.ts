@@ -174,7 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await gsapi.spreadsheets.values.append({
         spreadsheetId: STORE_SHEET_ID,
-        range: "Bill!A:I",
+        range: "Bill!A:K",
         valueInputOption: "USER_ENTERED",
         requestBody: { values: billValues },
       });
