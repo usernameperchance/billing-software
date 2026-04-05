@@ -240,24 +240,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : currentPoints + pointsEarned;
 
     const updateRow = existingIndex + 2;
-    await gsapi.spreadsheets.values.update({
-      spreadsheetId: STORE_SHEET_ID,
-      range: `Customers!E${updateRow}:H${updateRow}`,
-      valueInputOption: "USER_ENTERED",
-      requestBody: {
-        values: [[
-          date,
-          currentSpend + finalTotal,
-          currentBills + 1,
-          Math.max(0, newPoints),
-        ]],
-      },
-    });
-  }
-    } catch (err) {
-  console.error("Customer upsert failed:", err);
-  customerId = `TEMP-${customer.phone.replace(/[^0-9]/g, "")}`;
-  }
+      await gsapi.spreadsheets.values.update({
+                spreadsheetId: STORE_SHEET_ID,
+                range: `Customers!E${updateRow}:H${updateRow}`,
+                valueInputOption: "USER_ENTERED",
+                requestBody: {
+                values: [[
+                  date,
+                  currentSpend + finalTotal,
+                  currentBills + 1,
+                  Math.max(0, newPoints),
+                ]],
+              },
+            });
+          }
+        } catch (err) {
+        console.error("Customer upsert failed:", err);
+        customerId = `TEMP-${customer.phone.replace(/[^0-9]/g, "")}`;
+      }
 
       // --- Write bill rows with 11 columns (A:K) ---
       const billValues = items.map((i: any) => [

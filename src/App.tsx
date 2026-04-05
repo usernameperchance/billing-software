@@ -49,7 +49,7 @@ export default function App() {
   const [billDate] = useState(() =>
     new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
   );
-  const [billTime] = useState(() =>
+  const [billTime, setBillTime] = useState(() =>
     new Date().toLocaleTimeString("en-IN", {
       timeZone: "Asia/Kolkata",
       hour: "2-digit",
@@ -79,7 +79,44 @@ export default function App() {
     finally { setFetchingCustomer(false); }
   };
 
+  // Initial bill number fetch
   useEffect(() => { fetchNextBillNo(); }, []);
+
+  // Poll for latest bill number every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchNextBillNo();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Live clock: update time every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBillTime(new Date().toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }));
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Refresh bill number and time when window regains focus
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchNextBillNo();
+      setBillTime(new Date().toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }));
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, []);
 
   useEffect(() => {
     const cached = sessionStorage.getItem("allItems");
@@ -456,9 +493,18 @@ export default function App() {
       priceCache.current = {};
       fetchNextBillNo();
 
+      // Reset everything
+      setItems([]);
+      setItem("");
+      setShade("");
+      setSelectedRow(null);
+      setCustomer(null);
+      setCustomerName("");
+      setPhone("");
+      setRedeemPoints(false);
+
       alert("Bill saved successfully.");
       return true;
-
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Failed to save bill.");
@@ -485,12 +531,12 @@ export default function App() {
       alert("Bill image downloaded. Attach it in WhatsApp.");
     }
 
-      const waLink = `https://wa.me/${cleaned}`;
-      const anchor = document.createElement("a");
-      anchor.href = waLink;
-      anchor.target = "_blank";
-      anchor.rel = "noopener noreferrer";
-      anchor.click();
+    const waLink = `https://wa.me/${cleaned}`;
+    const anchor = document.createElement("a");
+    anchor.href = waLink;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.click();
   };
 
   const sendWhatsApp = async () => {
@@ -505,54 +551,40 @@ export default function App() {
   };
 
   const saveBillAndSend = async () => {
-    if (items.length === 0 || saving) return;
-    if (!isPhoneValid) {
-      alert("Please enter a valid 10-digit customer phone number.");
-      return;
-    }
+  if (items.length === 0 || saving) return;
+  if (!isPhoneValid) {
+    alert("Please enter a valid 10-digit customer phone number.");
+    return;
+  }
 
-    const cleaned = phone.replace(/[^0-9]/g, "");
+  const cleaned = phone.replace(/[^0-9]/g, "");
+  const blob = await captureBillImage();
+  let copied = false;
 
-    const blob = await captureBillImage();
-    if (!blob) {
-      alert("Image fetch failed, attach manually in WhatsApp. Bill saved.");
-      return;
-    }
-
-    let copied = false;
+  if (blob) {
     try {
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       copied = true;
     } catch (err) {
       console.error(err);
     }
+  } else {
+    alert("Image fetch failed. Bill will be saved, but you'll need to attach the image manually in WhatsApp.");
+  }
 
-    const saved = await saveBill();
-    if (!saved) return;
+  const saved = await saveBill(); // This clears items & resets form
+  if (!saved) return;
 
-    if (cleaned) {
-      const waLink = `https://wa.me/${cleaned}`;
-      const anchor = document.createElement("a");
-      anchor.href = waLink;
-      anchor.target = "_blank";
-      anchor.rel = "noopener noreferrer";
-      anchor.click();
-
-      if (copied) {
-        alert("Bill copied. Paste it in WhatsApp.");
-      } else {
-        alert("Failed to copy image. Please attach the downloaded bill image in WhatsApp.");
-      }
+  if (cleaned) {
+    const waLink = `https://wa.me/${cleaned}`;
+    const anchor = document.createElement("a");
+    anchor.href = waLink;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.click();
+      if (copied) alert("Bill copied. Paste it in WhatsApp.");
+      else alert("Please attach the bill image manually in WhatsApp.");
     }
-
-    setItems([]);
-    setItem("");
-    setShade("");
-    setSelectedRow(null);
-    setCustomer(null);
-    setCustomerName("");
-    setPhone("");
-    setRedeemPoints(false);
   };
 
   const generateStoreRestock = async () => {
