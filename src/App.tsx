@@ -58,7 +58,9 @@ export default function App() {
     })
   );
 
-  const isPhoneValid = phone.replace(/[^0-9]/g, "").length === 10;
+  const normalizedPhone = phone.replace(/[^0-9]/g, "");
+  const isPhoneValid = normalizedPhone.length === 10;
+  const customerMatchesPhone = !!customer && customer.phone.replace(/[^0-9]/g, "") === normalizedPhone;
 
   const fetchNextBillNo = () => {
     fetch("/api/bill")
@@ -382,7 +384,7 @@ export default function App() {
   const slabDiscount = applicableSlab ? Math.round(grandTotal * applicableSlab.pct / 100) : 0;
 
   const pointsDiscount = (() => {
-    if (!redeemPoints || !pointsConfig || !customer) return 0;
+    if (!redeemPoints || !pointsConfig || !customerMatchesPhone) return 0;
     if (customer.points < pointsConfig.minRedeem) return 0;
     return Math.floor(customer.points * pointsConfig.redeemRate);
   })();
@@ -395,9 +397,12 @@ export default function App() {
     const billEl = document.getElementById("print-bill");
     if (!billEl) return null;
 
+    const logoEl = billEl.querySelector<HTMLImageElement>("img[alt='logo']");
+    const originalSrc = logoEl?.src ?? "";
+    const noPrint = billEl.querySelectorAll<HTMLElement>(".no-print");
+    const printOnly = billEl.querySelectorAll<HTMLElement>(".print-only");
+
     try {
-      const logoEl = billEl.querySelector<HTMLImageElement>("img[alt='logo']");
-      const originalSrc = logoEl?.src ?? "";
       if (logoEl) {
         try {
           const pngUrl = await svgToPngDataUrl("/logo.svg");
@@ -406,9 +411,7 @@ export default function App() {
         } catch { /* continue */ }
       }
 
-      const noPrint = billEl.querySelectorAll<HTMLElement>(".no-print");
       noPrint.forEach(el => el.style.display = "none");
-      const printOnly = billEl.querySelectorAll<HTMLElement>(".print-only");
       printOnly.forEach(el => el.style.display = "inline");
       await new Promise(r => setTimeout(r, 50));
 
@@ -418,12 +421,8 @@ export default function App() {
         useCORS: true,
         allowTaint: true,
         logging: false,
-        imageTimeout: 0
-    });
-
-      noPrint.forEach(el => el.style.display = "");
-      printOnly.forEach(el => el.style.display = "none");
-      if (logoEl) logoEl.src = originalSrc;
+        imageTimeout: 0,
+      });
 
       return new Promise<Blob | null>((resolve) => {
         canvas.toBlob((blob) => resolve(blob), "image/png");
@@ -431,6 +430,10 @@ export default function App() {
     } catch (err) {
       console.error("Failed to capture bill image:", err);
       return null;
+    } finally {
+      noPrint.forEach(el => el.style.display = "");
+      printOnly.forEach(el => el.style.display = "none");
+      if (logoEl) logoEl.src = originalSrc;
     }
   };
 
@@ -551,37 +554,42 @@ export default function App() {
   };
 
   const saveBillAndSend = async () => {
-  if (items.length === 0 || saving) return;
-  if (!isPhoneValid) {
-    alert("Please enter a valid 10-digit customer phone number.");
-    return;
-  }
-
-  const cleaned = phone.replace(/[^0-9]/g, "");
-  const blob = await captureBillImage();
-  let copied = false;
-
-  if (blob) {
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      copied = true;
-    } catch (err) {
-      console.error(err);
+    if (items.length === 0 || saving) return;
+    if (!isPhoneValid) {
+      alert("Please enter a valid 10-digit customer phone number.");
+      return;
     }
-  } else {
-    alert("Image fetch failed. Bill will be saved, but you'll need to attach the image manually in WhatsApp.");
-  }
 
-  const saved = await saveBill(); // This clears items & resets form
-  if (!saved) return;
+    if (redeemPoints && !customerMatchesPhone) {
+      alert("Customer details are still loading or do not match the current phone number.");
+      return;
+    }
 
-  if (cleaned) {
-    const waLink = `https://wa.me/${cleaned}`;
-    const anchor = document.createElement("a");
-    anchor.href = waLink;
-    anchor.target = "_blank";
-    anchor.rel = "noopener noreferrer";
-    anchor.click();
+    const cleaned = normalizedPhone;
+    const blob = await captureBillImage();
+    let copied = false;
+
+    if (blob) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        copied = true;
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      alert("Image fetch failed. Bill will be saved, but you'll need to attach the image manually in WhatsApp.");
+    }
+
+    const saved = await saveBill(); // This clears items & resets form
+    if (!saved) return;
+
+    if (cleaned) {
+      const waLink = `https://wa.me/${cleaned}`;
+      const anchor = document.createElement("a");
+      anchor.href = waLink;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.click();
       if (copied) alert("Bill copied. Paste it in WhatsApp.");
       else alert("Please attach the bill image manually in WhatsApp.");
     }
@@ -860,6 +868,11 @@ export default function App() {
         )}
         {!customer && phone.replace(/[^0-9]/g, "").length >= 10 && !fetchingCustomer && (
           <div style={{ fontSize: 13, color: "#888", marginTop: 6 }}>New customer — will be registered on save</div>
+        )}
+        {customer && !customerMatchesPhone && (
+          <div style={{ fontSize: 12, color: "#b56a00", marginTop: 6 }}>
+            Customer lookup does not match the current phone number yet.
+          </div>
         )}
       </div>
 
