@@ -240,7 +240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const storeAvailable = storeRowIndex !== -1 ? storeStock : 0;
           const loftAvailable = loftRowIndex !== -1 ? loftIndividuals + loftPackets * packetSize : 0;
           if (storeAvailable + loftAvailable < qty) {
-            throw new Error(`Insufficient stock for ${item}/${shade}`);
+            throw new Error(`Insufficient stock for ${item} Shade No: ${shade}`);
           }
 
           let remaining = qty;
@@ -291,7 +291,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           if (remaining > 0) {
-            throw new Error(`Insufficient stock for ${item}/${shade}`);
+            throw new Error(`Insufficient stock for ${item} Shade No: ${shade}`);
           }
 
           if (usedFromLoft > 0) {
