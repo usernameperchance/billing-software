@@ -27,6 +27,11 @@ function generateCustomerId(rows: any[][]): string {
   return `LMS-${String(next).padStart(4, "0")}`;
 }
 
+function escapeSheetName(name: string): string {
+  // Escape single quotes by doubling them, wrap in single quotes
+  return `'${name.replace(/'/g, "''")}'`;
+}
+
 async function getPacketSize(gsapi: any, article: string): Promise<number> {
   try {
     const res = await gsapi.spreadsheets.values.get({
@@ -129,7 +134,7 @@ async function logLoftFallback(
 async function restoreStoreStock(gsapi: any, item: string, rowNumber: number, stock: number) {
   await gsapi.spreadsheets.values.update({
     spreadsheetId: STORE_SHEET_ID,
-    range: `'${item}'!B${rowNumber}`,
+    range: `${escapeSheetName(item)}!B${rowNumber}`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [[stock]] },
   });
@@ -138,7 +143,7 @@ async function restoreStoreStock(gsapi: any, item: string, rowNumber: number, st
 async function restoreLoftStock(gsapi: any, item: string, rowNumber: number, individuals: number, packets: number) {
   await gsapi.spreadsheets.values.update({
     spreadsheetId: LOFT_SHEET_ID,
-    range: `'${item}'!E${rowNumber}:F${rowNumber}`,
+    range: `${escapeSheetName(item)}!E${rowNumber}:F${rowNumber}`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [[individuals, packets]] },
   });
@@ -208,7 +213,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         try {
           const storeRes = await gsapi.spreadsheets.values.get({
             spreadsheetId: STORE_SHEET_ID,
-            range: `'${item}'!A2:B`,
+            range: `${escapeSheetName(item)}!A2:B`,
           });
           const storeRows = storeRes.data.values || [];
           storeRowIndex = storeRows.findIndex(
@@ -220,7 +225,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           const loftRes = await gsapi.spreadsheets.values.get({
             spreadsheetId: LOFT_SHEET_ID,
-            range: `'${item}'!A2:L`,
+            range: `${escapeSheetName(item)}!A2:L`,
           });
           const loftRows = loftRes.data.values || [];
           loftRowIndex = loftRows.findIndex(
@@ -247,13 +252,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             await gsapi.spreadsheets.values.update({
               spreadsheetId: STORE_SHEET_ID,
-              range: `'${item}'!B${storeRowIndex + 2}`,
+              range: `${escapeSheetName(item)}!B${storeRowIndex + 2}`,
               valueInputOption: "USER_ENTERED",
               requestBody: { values: [[newStoreStock]] },
             });
             await gsapi.spreadsheets.values.update({
               spreadsheetId: STORE_SHEET_ID,
-              range: `'${item}'!D${storeRowIndex + 2}`,
+              range: `${escapeSheetName(item)}!D${storeRowIndex + 2}`,
               valueInputOption: "USER_ENTERED",
               requestBody: { values: [[timestamp]] },
             });
@@ -278,7 +283,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             usedFromLoft = qty - usedFromStore;
             await gsapi.spreadsheets.values.update({
               spreadsheetId: LOFT_SHEET_ID,
-              range: `'${item}'!E${loftRowIndex + 2}:F${loftRowIndex + 2}`,
+              range: `${escapeSheetName(item)}!E${loftRowIndex + 2}:F${loftRowIndex + 2}`,
               valueInputOption: "USER_ENTERED",
               requestBody: { values: [[newIndividuals, newPackets]] },
             });
