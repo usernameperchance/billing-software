@@ -37,14 +37,14 @@ export default function App() {
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
   const [restockLoading, setRestockLoading] = useState(false);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
-
   const shadeCache = useRef<Record<string, string[]>>({});
   const priceCache = useRef<Record<string, { price: number; qty: number }>>({});
-
   const itemRef = useRef<HTMLInputElement>(null);
   const shadeRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
+  const [editingShadeRow, setEditingShadeRow] = useState<number | null>(null);
+  const [editingShadeValue, setEditingShadeValue] = useState("");
 
   const [billDate] = useState(() =>
     new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
@@ -374,6 +374,27 @@ export default function App() {
     }
   };
 
+  const startEditShade = (idx: number, currentShade: string) => {
+  setEditingShadeRow(idx);
+  setEditingShadeValue(currentShade);
+};
+
+const saveEditShade = (idx: number) => {
+  if (editingShadeValue.trim() === "") {
+    alert("Shade cannot be empty");
+    return;
+  }
+  const updated = [...items];
+  updated[idx].shade = editingShadeValue.trim();
+  setItems(updated);
+  setEditingShadeRow(null);
+  setEditingShadeValue("");
+};
+
+  const cancelEditShade = () => {
+    setEditingShadeRow(null);
+    setEditingShadeValue("");
+  };
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
 
@@ -779,7 +800,31 @@ export default function App() {
                 >
                   <td style={{ ...styles.td, textAlign: "center", color: "#999", fontSize: 13 }}>{idx + 1}</td>
                   <td style={styles.td}>{i.item}</td>
-                  <td style={styles.td}>{i.shade}</td>
+                  <td style={styles.td}>
+                    {editingShadeRow === idx ? (
+                      <input
+                        type="text"
+                        value={editingShadeValue}
+                        onChange={(e) => setEditingShadeValue(e.target.value)}
+                        onBlur={() => saveEditShade(idx)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEditShade(idx);
+                          if (e.key === "Escape") cancelEditShade();
+                        }}
+                        autoFocus
+                        style={{ width: "100%", padding: "4px", fontSize: "14px" }}
+                      />
+                    ) : (
+                      <span
+                        onDoubleClick={() => startEditShade(idx, i.shade)}
+                        style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, minWidth: "80px" }}
+                        title="Double-click to edit"
+                      >
+                        <span style={{ fontSize: "10px", color: "#aaa" }}>✎</span>
+                        <span>{i.shade}</span>
+                      </span>
+                    )}
+                  </td>
                   <td style={{ ...styles.td, textAlign: "center" }}>
                     <span className="no-print" style={styles.qtyControls}>
                       <button style={styles.qtyBtn} onClick={(e) => { e.stopPropagation(); updateQty(idx, i.qty - 1); }}>−</button>
