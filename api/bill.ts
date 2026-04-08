@@ -28,8 +28,8 @@ function generateCustomerId(rows: any[][]): string {
 }
 
 function escapeSheetName(name: string): string {
-  // Escape single quotes by doubling them, wrap in single quotes
-  return `'${name.replace(/'/g, "''")}'`;
+  const escaped = name.replace(/'/g, "''");  // Escape single quotes by doubling
+  return `'${escaped}'`;
 }
 
 async function getPacketSize(gsapi: any, article: string): Promise<number> {
