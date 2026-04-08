@@ -787,6 +787,7 @@ const cancelEditShade = () => {
 
       <div id="print-bill" style={styles.billArea}>
         <div style={styles.billHeader}>
+          <div style={styles.billHeaderTop}>
           <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
           <div style={styles.billMeta}>
             <div style={styles.billMetaRow}>
@@ -803,7 +804,23 @@ const cancelEditShade = () => {
             </div>
           </div>
         </div>
-
+        {(customerName || phone)&& (
+          <div style={styles.customerBillInfo}>
+            {customerName && (
+              <div style={styles.customerBillInfo}>
+                <span style={styles.metaLabel}>Customer</span>
+                <span style={styles.metaValue}>{customerName}</span>
+              </div>
+            )}
+            {phone && (
+              <div style={styles.customerBillInfo}>
+                <span style={styles.metaLabel}>Phone</span>
+                <span style={styles.metaValue}>{phone}</span>
+              </div>
+            )}
+          </div>
+        )}
+        </div>
         <hr style={styles.divider} />
 
         <table className="bill-table" style={styles.table}>
@@ -1132,6 +1149,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: 16,
     gap: 10,
   },
+  billHeaderTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+  customerBillInfo: {
+    marginTop: 12,
+    paddingTop: 8,
+    borderTop: "1px solid #e0e0e0",
+    textAlign: "left",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  customerBillInfoRow: { display: "flex", gap: 12, alignItems: "center" },
   logo: { width: 240, height: "auto", objectFit: "contain", display: "block", margin: "0 auto 8px auto" },
   billMeta: { display: "flex", flexDirection: "column", gap: 4, alignSelf: "flex-end", textAlign: "right" },
   billMetaRow: { display: "flex", gap: 12, justifyContent: "flex-end", alignItems: "center" },
