@@ -49,8 +49,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ============= HANDLERS =============
-
 async function handleGetItems(gsapi: any, res: VercelResponse) {
   const response = await gsapi.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
@@ -66,9 +64,10 @@ async function handleGetShades(gsapi: any, req: VercelRequest, res: VercelRespon
     return res.status(400).json({ error: "Missing item parameter" });
   }
 
+  // Shade column is now B (after barcode in A)
   const response = await gsapi.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `'${item.replace(/'/g, "''")}'!A2:A`,
+    range: `'${item.replace(/'/g, "''")}'!B2:B`,
   });
   const shades = response.data.values?.flatMap((v: any) => v) || [];
   return res.status(200).json({ shades });
@@ -80,35 +79,29 @@ async function handleGetPrice(gsapi: any, req: VercelRequest, res: VercelRespons
     return res.status(400).json({ error: "Missing item or shade parameter" });
   }
 
+  // Shade in B, stock in C, price in D
   const response = await gsapi.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `'${item.replace(/'/g, "''")}'!A2:C`,
+    range: `'${item.replace(/'/g, "''")}'!B2:D`,
   });
 
   const rows = response.data.values || [];
   const target = shade.toString().trim().toLowerCase();
 
-  // Priority 1: Exact match
   let matchedRow = rows.find((r: any) =>
     r[0]?.toString().trim().toLowerCase() === target
   );
-
-  // Priority 2: Shade starts with the input (e.g., "101" matches "101 Red")
   if (!matchedRow) {
     matchedRow = rows.find((r: any) =>
       r[0]?.toString().trim().toLowerCase().startsWith(target)
     );
   }
-
-  // Priority 3: Input starts with shade (e.g., "101 Red" matches "101")
   if (!matchedRow) {
     matchedRow = rows.find((r: any) => {
       const rowShade = r[0]?.toString().trim().toLowerCase();
       return target.startsWith(rowShade);
     });
   }
-
-  // Priority 4: Contains match (e.g., "Red" matches "101 Red")
   if (!matchedRow) {
     matchedRow = rows.find((r: any) =>
       r[0]?.toString().trim().toLowerCase().includes(target) ||
@@ -116,10 +109,9 @@ async function handleGetPrice(gsapi: any, req: VercelRequest, res: VercelRespons
     );
   }
 
+  const stock = matchedRow && matchedRow[1] ? Number(matchedRow[1]) : 0;
   const price = matchedRow && matchedRow[2] ? Number(matchedRow[2]) : 0;
-  const qty = matchedRow && matchedRow[1] ? Number(matchedRow[1]) : 0;
-
-  return res.status(200).json({ price, qty });
+  return res.status(200).json({ price, qty: stock });
 }
 
 async function handleGetCost(gsapi: any, req: VercelRequest, res: VercelResponse) {
@@ -137,14 +129,11 @@ async function handleGetCost(gsapi: any, req: VercelRequest, res: VercelResponse
   const itemStr = item.toString().trim().toLowerCase();
   const shadeStr = shade ? shade.toString().trim().toLowerCase() : "";
   
-  // Try exact item+shade match
   let matchedRow = rows.find((r: any) => {
     const rowItem = r[0]?.toString().trim().toLowerCase();
     const rowShade = r[1]?.toString().trim().toLowerCase();
     return rowItem === itemStr && rowShade === shadeStr;
   });
-
-  // Fallback: item only
   if (!matchedRow) {
     matchedRow = rows.find((r: any) => {
       const rowItem = r[0]?.toString().trim().toLowerCase();

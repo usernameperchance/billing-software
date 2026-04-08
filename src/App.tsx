@@ -10,6 +10,7 @@ type BillItem = {
   price: number;
   total: number;
   profit: number;
+  misc?: boolean;
 };
 
 type Slab = { minTotal: number; maxTotal: number; pct: number };
@@ -37,6 +38,9 @@ export default function App() {
   const [fetchingCustomer, setFetchingCustomer] = useState(false);
   const [restockLoading, setRestockLoading] = useState(false);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
+  const [barcode, setBarcode] = useState("");
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
   const shadeCache = useRef<Record<string, string[]>>({});
   const priceCache = useRef<Record<string, { price: number; qty: number }>>({});
   const itemRef = useRef<HTMLInputElement>(null);
@@ -48,63 +52,61 @@ export default function App() {
   const [editShadeSuggestion, setEditShadeSuggestion] = useState<string | null>(null);
   const [validatingShade, setValidatingShade] = useState(false);
 
-const startEditShade = (idx: number, currentShade: string) => {
-  if (validatingShade) return;
-  setEditingShadeRow(idx);
-  setEditingShadeValue(currentShade);
-  setEditShadeSuggestion(null);
-};
+  const startEditShade = (idx: number, currentShade: string) => {
+    if (validatingShade) return;
+    setEditingShadeRow(idx);
+    setEditingShadeValue(currentShade);
+    setEditShadeSuggestion(null);
+  };
 
-const saveEditShade = async (idx: number) => {
-  const newShade = editingShadeValue.trim();
-  if (newShade === "") {
-    alert("Shade cannot be empty");
-    return;
-  }
-
-  const itemName = items[idx].item;
-  setValidatingShade(true);
-
-  try {
-    // Fetch shades for this item (use cache if available)
-    let shades: string[] = [];
-    if (shadeCache.current[itemName]) {
-      shades = shadeCache.current[itemName];
-    } else {
-      const res = await fetch(`/api/core?action=getShades&item=${encodeURIComponent(itemName)}`);
-      const data = await res.json();
-      shades = data.shades || [];
-      shadeCache.current[itemName] = shades;
-    }
-
-    // Case-insensitive match
-    const matchedShade = shades.find(s => s.toLowerCase() === newShade.toLowerCase());
-    if (!matchedShade) {
-      alert(`"${newShade}" is not a valid shade for ${itemName}. Available: ${shades.join(", ")}`);
-      setEditingShadeRow(null);
-      setEditingShadeValue("");
+  const saveEditShade = async (idx: number) => {
+    const newShade = editingShadeValue.trim();
+    if (newShade === "") {
+      alert("Shade cannot be empty");
       return;
     }
 
-    // Update with the exact case from the sheet (or keep user's newShade)
-    const updated = [...items];
-    updated[idx].shade = matchedShade; // use the sheet's casing
-    setItems(updated);
+    const itemName = items[idx].item;
+    setValidatingShade(true);
+
+    try {
+      let shades: string[] = [];
+      if (shadeCache.current[itemName]) {
+        shades = shadeCache.current[itemName];
+      } else {
+        const res = await fetch(`/api/core?action=getShades&item=${encodeURIComponent(itemName)}`);
+        const data = await res.json();
+        shades = data.shades || [];
+        shadeCache.current[itemName] = shades;
+      }
+
+      const matchedShade = shades.find(s => s.toLowerCase() === newShade.toLowerCase());
+      if (!matchedShade) {
+        alert(`"${newShade}" is not a valid shade for ${itemName}. Available: ${shades.join(", ")}`);
+        setEditingShadeRow(null);
+        setEditingShadeValue("");
+        return;
+      }
+
+      const updated = [...items];
+      updated[idx].shade = matchedShade;
+      setItems(updated);
+      setEditingShadeRow(null);
+      setEditingShadeValue("");
+    } catch (err) {
+      console.error("Failed to validate shade:", err);
+      alert("Could not validate shade. Please try again.");
+    } finally {
+      setValidatingShade(false);
+    }
+  };
+
+  const cancelEditShade = () => {
+    if (validatingShade) return;
     setEditingShadeRow(null);
     setEditingShadeValue("");
-  } catch (err) {
-    console.error("Failed to validate shade:", err);
-    alert("Could not validate shade. Please try again.");
-  } finally {
-    setValidatingShade(false);
-  }
-};
+  };
 
-const cancelEditShade = () => {
-  if (validatingShade) return;
-  setEditingShadeRow(null);
-  setEditingShadeValue("");
-};
   const [billDate] = useState(() =>
     new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })
   );
@@ -140,10 +142,8 @@ const cancelEditShade = () => {
     finally { setFetchingCustomer(false); }
   };
 
-  // Initial bill number fetch
   useEffect(() => { fetchNextBillNo(); }, []);
 
-  // Poll for latest bill number every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       fetchNextBillNo();
@@ -151,7 +151,6 @@ const cancelEditShade = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Live clock: update time every minute
   useEffect(() => {
     const interval = setInterval(() => {
       setBillTime(new Date().toLocaleTimeString("en-IN", {
@@ -164,7 +163,6 @@ const cancelEditShade = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Refresh bill number and time when window regains focus
   useEffect(() => {
     const handleFocus = () => {
       fetchNextBillNo();
@@ -314,6 +312,33 @@ const cancelEditShade = () => {
     setTimeout(() => qtyRef.current?.focus(), 50);
   };
 
+  const handleBarcodeScan = async () => {
+    const code = barcode.trim();
+    if (!code) return;
+    setBarcodeLoading(true);
+    try {
+      const res = await fetch(`/api/lookupBarcode?barcode=${encodeURIComponent(code)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Product not found");
+        setBarcode("");
+        return;
+      }
+      setItem(data.item);
+      setShade(data.shade);
+      setPrice(data.price);
+      setBarcode("");
+      addItem(); // auto-add to bill
+    } catch (err) {
+      console.error(err);
+      alert("Failed to lookup barcode");
+      setBarcode("");
+    } finally {
+      setBarcodeLoading(false);
+      if (barcodeInputRef.current) barcodeInputRef.current.focus();
+    }
+  };
+
   useEffect(() => {
     const fields = [itemRef, shadeRef, qtyRef, priceRef];
 
@@ -355,6 +380,11 @@ const cancelEditShade = () => {
       }
 
       if (e.key === "Tab") {
+        if (target === barcodeInputRef.current && barcode) {
+          e.preventDefault();
+          handleBarcodeScan();
+          return;
+        }
         if (target === itemRef.current && itemSuggestion && item !== itemSuggestion) {
           e.preventDefault();
           selectItem(itemSuggestion);
@@ -368,6 +398,12 @@ const cancelEditShade = () => {
       }
 
       if (e.key !== "Enter") return;
+
+      if (target === barcodeInputRef.current && barcode) {
+        e.preventDefault();
+        handleBarcodeScan();
+        return;
+      }
 
       if (target === itemRef.current) {
         if (itemSuggestion && item !== itemSuggestion) {
@@ -412,25 +448,43 @@ const cancelEditShade = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric]);
+  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode]);
 
   const addItem = () => {
-    if (!item || !shade || !price) return;
+    if (!price) return;
+    if (!item) {
+      alert("Please enter an item name");
+      return;
+    }
+
+    const itemExists = allItems.some(i => i.toLowerCase() === item.toLowerCase());
+    const isMisc = !itemExists;
+
+    if (itemExists && !shade) {
+      alert("Please select a shade for this item");
+      return;
+    }
 
     const total = qty * price;
     const profit = (price - cost) * qty;
 
-    setItems(prev => [...prev, { item, shade, qty, cost, price, total, profit }]);
+    setItems(prev => [...prev, {
+      item: item,
+      shade: shade || "Misc",
+      qty,
+      cost: cost || 0,
+      price,
+      total,
+      profit,
+      misc: isMisc,
+    }]);
+
+    setItem("");
     setShade("");
     setQty(1);
     setPrice(0);
-
-    if (isStandard) {
-      setItem("");
-      setTimeout(() => itemRef.current?.focus(), 50);
-    } else {
-      setTimeout(() => shadeRef.current?.focus(), 50);
-    }
+    setCost(0);
+    setTimeout(() => barcodeInputRef.current?.focus(), 50);
   };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
@@ -555,7 +609,6 @@ const cancelEditShade = () => {
       priceCache.current = {};
       fetchNextBillNo();
 
-      // Reset everything
       setItems([]);
       setItem("");
       setShade("");
@@ -639,7 +692,7 @@ const cancelEditShade = () => {
       alert("Image fetch failed. Bill will be saved, but you'll need to attach the image manually in WhatsApp.");
     }
 
-    const saved = await saveBill(); // This clears items & resets form
+    const saved = await saveBill();
     if (!saved) return;
 
     if (cleaned) {
@@ -733,6 +786,25 @@ const cancelEditShade = () => {
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
       <div className="no-print" style={styles.card}>
         <div style={styles.row}>
+          <input
+            ref={barcodeInputRef}
+            type="text"
+            value={barcode}
+            onChange={(e) => setBarcode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleBarcodeScan();
+              }
+            }}
+            placeholder="Scan Barcode..."
+            style={styles.smallInput}
+            autoFocus
+            disabled={barcodeLoading}
+          />
+          {barcodeLoading && <span style={{ marginLeft: 8 }}>⌛</span>}
+        </div>
+        <div style={styles.row}>
           <div style={styles.autofillWrapper}>
             <input
               ref={itemRef}
@@ -740,11 +812,13 @@ const cancelEditShade = () => {
               onChange={(e) => setItem(e.target.value)}
               placeholder="Item..."
               style={styles.smallInput}
-              autoFocus
               autoComplete="off"
             />
             {itemSuggestion && item !== itemSuggestion && (
               <span style={styles.suggestion}>{itemSuggestion}</span>
+            )}
+            {item && !allItems.some(i => i.toLowerCase() === item.toLowerCase()) && (
+              <span style={{ fontSize: 11, color: "#e67e22", marginLeft: 8 }}>(New item – no stock deduction)</span>
             )}
           </div>
 
@@ -853,7 +927,7 @@ const cancelEditShade = () => {
                   onClick={() => setSelectedRow(idx)}
                 >
                   <td style={{ ...styles.td, textAlign: "center", color: "#999", fontSize: 13 }}>{idx + 1}</td>
-                  <td style={styles.td}>{i.item}</td>
+                  <td style={styles.td}>{i.item} {i.misc && <span style={{ fontSize: 10, color: "#e67e22" }}>(Misc)</span>}</td>
                   <td style={styles.td}>
                     {editingShadeRow === idx ? (
                       <div style={styles.autofillWrapper}>
@@ -863,7 +937,6 @@ const cancelEditShade = () => {
                           onChange={(e) => {
                             const val = e.target.value;
                             setEditingShadeValue(val);
-                            // Compute suggestion based on item's shades
                             const itemName = items[idx].item;
                             let itemShades: string[] = [];
                             if (shadeCache.current[itemName]) {

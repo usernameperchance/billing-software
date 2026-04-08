@@ -28,8 +28,7 @@ function generateCustomerId(rows: any[][]): string {
 }
 
 function escapeSheetName(name: string): string {
-  const escaped = name.replace(/'/g, "''");  // Escape single quotes by doubling
-  return `'${escaped}'`;
+  return `'${name.replace(/'/g, "''")}'`;
 }
 
 async function getPacketSize(gsapi: any, article: string): Promise<number> {
@@ -49,7 +48,6 @@ async function getPacketSize(gsapi: any, article: string): Promise<number> {
 }
 
 async function ensureBillSheetColumns(gsapi: any) {
-  // Ensure Bill sheet has at least 11 columns and a header for Customer ID
   const sheetMeta = await gsapi.spreadsheets.get({
     spreadsheetId: STORE_SHEET_ID,
     fields: "sheets.properties(title,gridProperties,sheetId)",
@@ -71,7 +69,6 @@ async function ensureBillSheetColumns(gsapi: any) {
         }]
       }
     });
-    // Add "Customer ID" header in K1 if not present
     const headerRow = await gsapi.spreadsheets.values.get({
       spreadsheetId: STORE_SHEET_ID,
       range: "Bill!1:1",
@@ -134,7 +131,7 @@ async function logLoftFallback(
 async function restoreStoreStock(gsapi: any, item: string, rowNumber: number, stock: number) {
   await gsapi.spreadsheets.values.update({
     spreadsheetId: STORE_SHEET_ID,
-    range: `${escapeSheetName(item)}!B${rowNumber}`,
+    range: `${escapeSheetName(item)}!C${rowNumber}`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [[stock]] },
   });
@@ -197,7 +194,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await ensureBillSheetColumns(gsapi);
 
+      // Process each item
       for (const entry of items) {
+        // Skip stock deduction for miscellaneous items
+        if (entry.misc) {
+          continue;
+        }
+
         const { item, shade, qty } = entry;
         let storeRowIndex = -1;
         let storeStock = 0;
@@ -211,9 +214,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let usedFromLoft = 0;
 
         try {
+          // Store sheet: B=shade, C=stock
           const storeRes = await gsapi.spreadsheets.values.get({
             spreadsheetId: STORE_SHEET_ID,
-            range: `${escapeSheetName(item)}!A2:B`,
+            range: `${escapeSheetName(item)}!B2:C`,
           });
           const storeRows = storeRes.data.values || [];
           storeRowIndex = storeRows.findIndex(
@@ -238,7 +242,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               packetSize = await getPacketSize(gsapi, item);
             }
           } catch (loftErr) {
-            // Loft sheet for this item doesn't exist; proceed without fallback stock
+            // Loft sheet missing – proceed without fallback
             loftRowIndex = -1;
           }
 
@@ -257,13 +261,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             await gsapi.spreadsheets.values.update({
               spreadsheetId: STORE_SHEET_ID,
-              range: `${escapeSheetName(item)}!B${storeRowIndex + 2}`,
+              range: `${escapeSheetName(item)}!C${storeRowIndex + 2}`,
               valueInputOption: "USER_ENTERED",
               requestBody: { values: [[newStoreStock]] },
             });
             await gsapi.spreadsheets.values.update({
               spreadsheetId: STORE_SHEET_ID,
-              range: `${escapeSheetName(item)}!D${storeRowIndex + 2}`,
+              range: `${escapeSheetName(item)}!E${storeRowIndex + 2}`,
               valueInputOption: "USER_ENTERED",
               requestBody: { values: [[timestamp]] },
             });
@@ -321,6 +325,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // Customer upsert (unchanged)
       let customerId = "";
       try {
         const custRes = await gsapi.spreadsheets.values.get({
@@ -405,6 +410,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         customerId = `TEMP-${customer.phone.replace(/[^0-9]/g, "")}`;
       }
 
+      // Write bill rows (11 columns)
       const billValues = items.map((entry: any) => [
         billNo,
         entry.item,

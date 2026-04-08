@@ -97,7 +97,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ============= STORE RESTOCK (Hooks) – supports "all" or single item =============
 async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
   const { item } = req.query;
   const isAll = item === "all";
@@ -114,7 +113,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
 
   await ensureRestockRequestsSheet(gsapi);
 
-  // Get recently requested items (still pending)
   const reqRes = await gsapi.spreadsheets.values.get({
     spreadsheetId: STORE_SHEET_ID,
     range: "Restock Requests!A2:D",
@@ -128,7 +126,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Get all item sheets
   const sheetMeta = await gsapi.spreadsheets.get({
     spreadsheetId: STORE_SHEET_ID,
     fields: "sheets.properties.title",
@@ -141,7 +138,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
     .map(s => s.properties?.title || "")
     .filter(name => name && !skipTabs.includes(name.toLowerCase()));
 
-  // Determine items to process
   let itemsToProcess: string[] = [];
   if (isAll) {
     itemsToProcess = allItemTabs;
@@ -159,9 +155,10 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
 
   for (const tab of itemsToProcess) {
     try {
+      // New column layout: B=shade, C=stock
       const stockRes = await gsapi.spreadsheets.values.get({
         spreadsheetId: STORE_SHEET_ID,
-        range: `'${tab}'!A2:B`,
+        range: `'${tab.replace(/'/g, "''")}'!B2:C`,
       });
       const rows = stockRes.data.values || [];
       let tabLines: string[] = [];
@@ -198,7 +195,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ message: null, summary });
   }
 
-  // Save new requests
   if (newRequests.length > 0) {
     await gsapi.spreadsheets.values.append({
       spreadsheetId: STORE_SHEET_ID,
@@ -218,7 +214,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({ message, waLink, summary: `${totalShades} shade(s) need restock${isAll ? " across all items" : ` for ${itemsToProcess[0]}`}` });
 }
 
-// ============= HOOKS RESTOCK (Read-only planning tool – no writes) =============
 async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
   const { item } = req.query;
   if (!item || typeof item !== "string") {
@@ -231,9 +226,10 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
   const moq = await getMOQ(gsapi, item);
   const packetSize = await getPacketSize(gsapi, item);
 
+  // Store sheet new columns: B=shade, C=stock, F=loftIndiv, G=loftPackets, H=bhiwandi
   const storeRes = await gsapi.spreadsheets.values.get({
     spreadsheetId: STORE_SHEET_ID,
-    range: `'${item}'!A2:H`,
+    range: `'${item.replace(/'/g, "''")}'!B2:H`,
   });
   const storeRows = storeRes.data.values || [];
   const transfers: any[] = [];
@@ -244,9 +240,9 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
     if (!shade) continue;
 
     const hooksStock = Number(row[1]) || 0;
-    const loftIndiv = Number(row[5]) || 0;
-    const loftPackets = Number(row[6]) || 0;
-    const bhiwandi = Number(row[7]) || 0;
+    const loftIndiv = Number(row[4]) || 0;
+    const loftPackets = Number(row[5]) || 0;
+    const bhiwandi = Number(row[6]) || 0;
 
     const shortage = moq - hooksStock;
     if (shortage <= 0) continue;
