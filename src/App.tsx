@@ -450,42 +450,75 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode]);
 
-  const addItem = () => {
-    if (!price) return;
-    if (!item) {
-      alert("Please enter an item name");
-      return;
+  const addItem = async () => {
+  if (!price) return;
+  if (!item) {
+    alert("Please enter an item name");
+    return;
+  }
+
+  const itemExists = allItems.some(i => i.toLowerCase() === item.toLowerCase());
+  let shadeIsValid = false;
+  let isMisc = false;
+
+  if (itemExists) {
+    // Fetch shades for this item (use cache or API)
+    let shadesList: string[] = [];
+    if (shadeCache.current[item]) {
+      shadesList = shadeCache.current[item];
+    } else {
+      try {
+        const res = await fetch(`/api/core?action=getShades&item=${encodeURIComponent(item)}`);
+        const data = await res.json();
+        shadesList = data.shades || [];
+        shadeCache.current[item] = shadesList;
+      } catch (err) {
+        console.error("Failed to fetch shades", err);
+        shadesList = [];
+      }
     }
-
-    const itemExists = allItems.some(i => i.toLowerCase() === item.toLowerCase());
-    const isMisc = !itemExists;
-
-    if (itemExists && !shade) {
-      alert("Please select a shade for this item");
-      return;
+    // If shade is provided, check if it exists in the list
+    if (shade) {
+      shadeIsValid = shadesList.some(s => s.toLowerCase() === shade.toLowerCase());
+    } else {
+      // Shade missing for existing item – treat as misc
+      shadeIsValid = false;
     }
+    isMisc = !shadeIsValid;
+  } else {
+    isMisc = true;
+  }
 
-    const total = qty * price;
-    const profit = (price - cost) * qty;
+  // If item exists and shade is missing/not found, we allow as misc, but we still need a shade value
+  const finalShade = shade || (isMisc ? "Misc" : "");
 
-    setItems(prev => [...prev, {
-      item: item,
-      shade: shade || "Misc",
-      qty,
-      cost: cost || 0,
-      price,
-      total,
-      profit,
-      misc: isMisc,
-    }]);
+  if (itemExists && !isMisc && !finalShade) {
+    alert("Please select a shade for this item");
+    return;
+  }
 
-    setItem("");
-    setShade("");
-    setQty(1);
-    setPrice(0);
-    setCost(0);
-    setTimeout(() => barcodeInputRef.current?.focus(), 50);
-  };
+  const total = qty * price;
+  const profit = (price - cost) * qty;
+
+  setItems(prev => [...prev, {
+    item: item,
+    shade: finalShade,
+    qty,
+    cost: cost || 0,
+    price,
+    total,
+    profit,
+    misc: isMisc,
+  }]);
+
+  // Reset form
+  setItem("");
+  setShade("");
+  setQty(1);
+  setPrice(0);
+  setCost(0);
+  setTimeout(() => barcodeInputRef.current?.focus(), 50);
+};
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
