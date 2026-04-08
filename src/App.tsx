@@ -879,21 +879,43 @@ const cancelEditShade = () => {
                             if (e.key === "Escape") cancelEditShade();
                           }}
                           autoFocus
-                          style={{ width: "100%", padding: "4px", fontSize: "14px" }}
+                          disabled={validatingShade}
+                          style={{
+                            width: "100%",
+                            minWidth: "120px",
+                            padding: "6px 8px",
+                            fontSize: "14px",
+                            border: "1px solid #ccc",
+                            borderRadius: "4px",
+                            boxSizing: "border-box",
+                          }}
                         />
                         {editShadeSuggestion && editingShadeValue !== editShadeSuggestion && (
                           <span style={styles.suggestion}>{editShadeSuggestion}</span>
                         )}
                       </div>
                     ) : (
-                      <span
-                        onDoubleClick={() => startEditShade(idx, i.shade)}
-                        style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, minWidth: "80px" }}
-                        title="Double-click to edit"
-                      >
-                        <span style={{ fontSize: "10px", color: "#aaa" }}>✎</span>
-                        <span>{i.shade}</span>
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                        <span style={{ flex: 1, wordBreak: "break-word", whiteSpace: "normal" }}>
+                          {i.shade}
+                        </span>
+                        <button
+                          onClick={() => startEditShade(idx, i.shade)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: "14px",
+                            padding: "4px",
+                            color: "#666",
+                            borderRadius: "4px",
+                          }}
+                          title="Edit shade"
+                          aria-label="Edit shade"
+                        >
+                          ✏️
+                        </button>
+                      </div>
                     )}
                   </td>
                   <td style={{ ...styles.td, textAlign: "center" }}>
