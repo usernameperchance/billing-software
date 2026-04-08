@@ -326,89 +326,93 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Customer upsert (unchanged)
-      let customerId = "";
-      try {
-        const custRes = await gsapi.spreadsheets.values.get({
-          spreadsheetId: STORE_SHEET_ID,
-          range: "Customers!A:H",
-        });
-        const custRows = custRes.data.values || [];
-        const phoneRaw = customer.phone.toString().trim();
+let customerId = "";
+try {
+  const custRes = await gsapi.spreadsheets.values.get({
+    spreadsheetId: STORE_SHEET_ID,
+    range: "Customers!A:H",
+  });
+  const custRows = custRes.data.values || [];
+  // Normalize input phone (digits only)
+  const phoneRaw = customer.phone.toString().replace(/[^0-9]/g, "");
 
-        let existingIndex = -1;
-        for (let i = 0; i < custRows.length; i++) {
-          const rowPhone = custRows[i][2]?.toString().trim();
-          if (rowPhone === phoneRaw) {
-            existingIndex = i;
-            break;
-          }
-        }
+  let existingIndex = -1;
+  for (let i = 0; i < custRows.length; i++) {
+    // Normalize phone from sheet (digits only)
+    const rowPhoneRaw = custRows[i][2]?.toString().replace(/[^0-9]/g, "") || "";
+    if (rowPhoneRaw === phoneRaw) {
+      existingIndex = i;
+      break;
+    }
+  }
 
-        const pointsEarned = pointsRedeemed > 0 ? 0 : Math.floor((finalTotal / 100) * earnRate);
+  const pointsEarned = pointsRedeemed > 0 ? 0 : Math.floor((finalTotal / 100) * earnRate);
 
-        if (existingIndex === -1) {
-          let emptyRowIndex = -1;
-          for (let i = 0; i < custRows.length; i++) {
-            if (!custRows[i][0] || custRows[i][0].toString().trim() === "") {
-              emptyRowIndex = i;
-              break;
-            }
-          }
-          if (emptyRowIndex === -1) emptyRowIndex = custRows.length;
-          const newRowNumber = emptyRowIndex + 2;
-          customerId = generateCustomerId(custRows.filter((row: any) => row[0]?.toString().startsWith("LMS-")));
-          await gsapi.spreadsheets.values.update({
-            spreadsheetId: STORE_SHEET_ID,
-            range: `Customers!A${newRowNumber}:H${newRowNumber}`,
-            valueInputOption: "USER_ENTERED",
-            requestBody: {
-              values: [[
-                customerId,
-                customer.name || "",
-                phoneRaw,
-                date,
-                date,
-                finalTotal,
-                1,
-                pointsEarned,
-              ]],
-            },
-          });
-        } else {
-          customerId = custRows[existingIndex][0];
-          const existing = custRows[existingIndex];
-          const customerName = (customer.name || existing[1] || "").toString().trim();
-          const customerPhone = phoneRaw || existing[2] || "";
-          const firstVisit = existing[3] || date;
-          const currentSpend = Number(existing[5]) || 0;
-          const currentBills = Number(existing[6]) || 0;
-          const currentPoints = Number(existing[7]) || 0;
-          const newPoints = pointsRedeemed > 0
-            ? currentPoints - (redeemRate > 0 ? pointsRedeemed / redeemRate : 0)
-            : currentPoints + pointsEarned;
-
-          const updateRow = existingIndex + 2;
-          await gsapi.spreadsheets.values.update({
-            spreadsheetId: STORE_SHEET_ID,
-            range: `Customers!B${updateRow}:H${updateRow}`,
-            valueInputOption: "USER_ENTERED",
-            requestBody: {
-              values: [[
-                customerName,
-                customerPhone,
-                firstVisit,
-                date,
-                currentSpend + finalTotal,
-                currentBills + 1,
-                Math.max(0, newPoints),
-              ]],
-            },
-          });
-        }
-      } catch (err) {
-        console.error("Customer upsert failed:", err);
-        customerId = `TEMP-${customer.phone.replace(/[^0-9]/g, "")}`;
+  if (existingIndex === -1) {
+    // New customer: find first empty row
+    let emptyRowIndex = -1;
+    for (let i = 0; i < custRows.length; i++) {
+      if (!custRows[i][0] || custRows[i][0].toString().trim() === "") {
+        emptyRowIndex = i;
+        break;
       }
+    }
+    if (emptyRowIndex === -1) emptyRowIndex = custRows.length;
+    const newRowNumber = emptyRowIndex + 2;
+    customerId = generateCustomerId(custRows.filter((row: any) => row[0]?.toString().startsWith("LMS-")));
+    await gsapi.spreadsheets.values.update({
+      spreadsheetId: STORE_SHEET_ID,
+      range: `Customers!A${newRowNumber}:H${newRowNumber}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[
+          customerId,
+          customer.name || "",
+          phoneRaw, // store normalized phone
+          date,
+          date,
+          finalTotal,
+          1,
+          pointsEarned,
+        ]],
+      },
+    });
+  } else {
+    // Existing customer: update same row
+    customerId = custRows[existingIndex][0];
+    const existing = custRows[existingIndex];
+    // Update name if provided, otherwise keep existing
+    const nameToStore = customer.name ? customer.name : existing[1];
+    const currentSpend = Number(existing[5]) || 0;
+    const currentBills = Number(existing[6]) || 0;
+    const currentPoints = Number(existing[7]) || 0;
+    const newPoints = pointsRedeemed > 0
+      ? currentPoints - (redeemRate > 0 ? pointsRedeemed / redeemRate : 0)
+      : currentPoints + pointsEarned;
+
+    const updateRow = existingIndex + 2;
+    // Update columns B (name), E (lastVisit), F (spend), G (bills), H (points)
+    await gsapi.spreadsheets.values.update({
+      spreadsheetId: STORE_SHEET_ID,
+      range: `Customers!B${updateRow}:H${updateRow}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [[
+          nameToStore,
+          existing[2], // keep original phone (already normalized)
+          existing[3] || date, // firstVisit
+          date,
+          currentSpend + finalTotal,
+          currentBills + 1,
+          Math.max(0, newPoints),
+        ]],
+      },
+    });
+  }
+} catch (err) {
+  console.error("Customer upsert failed:", err);
+  customerId = `TEMP-${customer.phone.replace(/[^0-9]/g, "")}`;
+}
 
       // Write bill rows (11 columns)
       const billValues = items.map((entry: any) => [
