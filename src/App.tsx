@@ -787,40 +787,39 @@ const cancelEditShade = () => {
 
       <div id="print-bill" style={styles.billArea}>
         <div style={styles.billHeader}>
-          <div style={styles.billHeaderTop}>
           <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
-          <div style={styles.billMeta}>
-            <div style={styles.billMetaRow}>
-              <span style={styles.metaLabel}>Bill No</span>
-              <span style={styles.metaValue}>#{nextBillNo ?? "—"}</span>
+          <div style={styles.billInfoRow}>
+            <div style={styles.billLeft}>
+              {customerName && (
+                <div style={styles.billDetailRow}>
+                  <span style={styles.metaLabel}>Customer</span>
+                  <span style={styles.metaValue}>{customerName}</span>
+                </div>
+              )}
+              {phone && (
+                <div style={styles.billDetailRow}>
+                  <span style={styles.metaLabel}>Phone</span>
+                  <span style={styles.metaValue}>{phone}</span>
+                </div>
+              )}
             </div>
-            <div style={styles.billMetaRow}>
-              <span style={styles.metaLabel}>Date</span>
-              <span style={styles.metaValue}>{billDate}</span>
-            </div>
-            <div style={styles.billMetaRow}>
-              <span style={styles.metaLabel}>Time</span>
-              <span style={styles.metaValue}>{billTime}</span>
+            <div style={styles.billRight}>
+              <div style={styles.billDetailRow}>
+                <span style={styles.metaLabel}>Bill No</span>
+                <span style={styles.metaValue}>#{nextBillNo ?? "—"}</span>
+              </div>
+              <div style={styles.billDetailRow}>
+                <span style={styles.metaLabel}>Date</span>
+                <span style={styles.metaValue}>{billDate}</span>
+              </div>
+              <div style={styles.billDetailRow}>
+                <span style={styles.metaLabel}>Time</span>
+                <span style={styles.metaValue}>{billTime}</span>
+              </div>
             </div>
           </div>
         </div>
-        {(customerName || phone)&& (
-          <div style={styles.customerBillInfo}>
-            {customerName && (
-              <div style={styles.customerBillInfo}>
-                <span style={styles.metaLabel}>Customer</span>
-                <span style={styles.metaValue}>{customerName}</span>
-              </div>
-            )}
-            {phone && (
-              <div style={styles.customerBillInfo}>
-                <span style={styles.metaLabel}>Phone</span>
-                <span style={styles.metaValue}>{phone}</span>
-              </div>
-            )}
-          </div>
-        )}
-        </div>
+
         <hr style={styles.divider} />
 
         <table className="bill-table" style={styles.table}>
@@ -1149,25 +1148,31 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: 16,
     gap: 10,
   },
-  billHeaderTop: {
+  billInfoRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    flexWrap: "wrap",
+    width: "100%",
+    gap: 20,
   },
-  customerBillInfo: {
-    marginTop: 12,
-    paddingTop: 8,
-    borderTop: "1px solid #e0e0e0",
-    textAlign: "left",
+  billLeft: {
     display: "flex",
     flexDirection: "column",
     gap: 4,
+    textAlign: "left",
   },
-  customerBillInfoRow: { display: "flex", gap: 12, alignItems: "center" },
+  billRight: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    textAlign: "right",
+  },
+  billDetailRow: {
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
+  },
   logo: { width: 240, height: "auto", objectFit: "contain", display: "block", margin: "0 auto 8px auto" },
-  billMeta: { display: "flex", flexDirection: "column", gap: 4, alignSelf: "flex-end", textAlign: "right" },
-  billMetaRow: { display: "flex", gap: 12, justifyContent: "flex-end", alignItems: "center" },
   metaLabel: { fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, minWidth: 36 },
   metaValue: { fontSize: 14, fontWeight: 600, color: "#111" },
   divider: { border: "none", borderTop: "1.5px solid #e8e8e8", margin: "14px 0" },

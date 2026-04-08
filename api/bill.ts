@@ -223,18 +223,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             storeStock = Number(storeRows[storeRowIndex][1]) || 0;
           }
 
-          const loftRes = await gsapi.spreadsheets.values.get({
-            spreadsheetId: LOFT_SHEET_ID,
-            range: `${escapeSheetName(item)}!A2:L`,
-          });
-          const loftRows = loftRes.data.values || [];
-          loftRowIndex = loftRows.findIndex(
-            (row: any) => row[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
-          );
-          if (loftRowIndex !== -1) {
-            loftIndividuals = Number(loftRows[loftRowIndex][4]) || 0;
-            loftPackets = Number(loftRows[loftRowIndex][5]) || 0;
-            packetSize = await getPacketSize(gsapi, item);
+          try {
+            const loftRes = await gsapi.spreadsheets.values.get({
+              spreadsheetId: LOFT_SHEET_ID,
+              range: `${escapeSheetName(item)}!A2:L`,
+            });
+            const loftRows = loftRes.data.values || [];
+            loftRowIndex = loftRows.findIndex(
+              (row: any) => row[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
+            );
+            if (loftRowIndex !== -1) {
+              loftIndividuals = Number(loftRows[loftRowIndex][4]) || 0;
+              loftPackets = Number(loftRows[loftRowIndex][5]) || 0;
+              packetSize = await getPacketSize(gsapi, item);
+            }
+          } catch (loftErr) {
+            // Loft sheet for this item doesn't exist; proceed without fallback stock
+            loftRowIndex = -1;
           }
 
           const storeAvailable = storeRowIndex !== -1 ? storeStock : 0;
