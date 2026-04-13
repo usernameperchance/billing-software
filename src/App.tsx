@@ -507,17 +507,22 @@ export default function App() {
     misc: isMisc,
   }]);
 
-  // Reset form
-  setItem("");
-  setShade("");
-  setQty(1);
-  setPrice(0);
-  setCost(0);
-
-  // Focus based on source
+  // Reset form based on source
   if (fromBarcode) {
+    // Barcode mode: clear everything for next scan
+    setItem("");
+    setShade("");
+    setQty(1);
+    setPrice(0);
+    setCost(0);
     setTimeout(() => barcodeInputRef.current?.focus(), 50);
   } else {
+    // Manual mode: keep item and shade for next entry, only reset qty and price
+    setQty(1);
+    setPrice(0);
+    // Optionally keep cost as is? Reset cost to 0
+    setCost(0);
+    // Keep item and shade unchanged
     setTimeout(() => itemRef.current?.focus(), 50);
   }
 };
