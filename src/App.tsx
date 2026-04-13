@@ -328,7 +328,7 @@ export default function App() {
       setShade(data.shade);
       setPrice(data.price);
       setBarcode("");
-      addItem(); // auto-add to bill
+      addItem(true); // auto-add to bill
     } catch (err) {
       console.error(err);
       alert("Failed to lookup barcode");
@@ -436,13 +436,13 @@ export default function App() {
 
       if (target === priceRef.current && item && shade && price) {
         e.preventDefault();
-        addItem();
+        addItem(false);
         return;
       }
 
       if (tag !== "BUTTON" && item && shade && price) {
         e.preventDefault();
-        addItem();
+        addItem(false);
       }
     };
 
@@ -450,7 +450,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode]);
 
-  const addItem = async () => {
+  const addItem = async (fromBarcode = false) => {
   if (!price) return;
   if (!item) {
     alert("Please enter an item name");
@@ -462,7 +462,6 @@ export default function App() {
   let isMisc = false;
 
   if (itemExists) {
-    // Fetch shades for this item (use cache or API)
     let shadesList: string[] = [];
     if (shadeCache.current[item]) {
       shadesList = shadeCache.current[item];
@@ -477,11 +476,9 @@ export default function App() {
         shadesList = [];
       }
     }
-    // If shade is provided, check if it exists in the list
     if (shade) {
       shadeIsValid = shadesList.some(s => s.toLowerCase() === shade.toLowerCase());
     } else {
-      // Shade missing for existing item – treat as misc
       shadeIsValid = false;
     }
     isMisc = !shadeIsValid;
@@ -489,7 +486,6 @@ export default function App() {
     isMisc = true;
   }
 
-  // If item exists and shade is missing/not found, we allow as misc, but we still need a shade value
   const finalShade = shade || (isMisc ? "Misc" : "");
 
   if (itemExists && !isMisc && !finalShade) {
@@ -517,7 +513,13 @@ export default function App() {
   setQty(1);
   setPrice(0);
   setCost(0);
-  setTimeout(() => itemRef.current?.focus(), 50);
+
+  // Focus based on source
+  if (fromBarcode) {
+    setTimeout(() => barcodeInputRef.current?.focus(), 50);
+  } else {
+    setTimeout(() => itemRef.current?.focus(), 50);
+  }
 };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
@@ -888,7 +890,7 @@ export default function App() {
             placeholder="Price"
             style={{ ...styles.smallInput, maxWidth: 100 }}
           />
-          <button style={styles.button} onClick={addItem}>Add</button>
+          <button style={styles.button} onClick={() => { addItem(false); }}>Add</button>
         </div>
       </div>
 
