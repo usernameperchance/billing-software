@@ -325,7 +325,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-// Customer upsert
+// Customer upsert (fixed: no new rows for existing customers)
 let customerId = "";
 try {
   const custRes = await gsapi.spreadsheets.values.get({
@@ -337,7 +337,7 @@ try {
 
   let existingIndex = -1;
   for (let i = 0; i < custRows.length; i++) {
-    const rowPhoneRaw = custRows[i][2]?.toString().replace(/[^0-9]/g, "") || "";
+    const rowPhoneRaw = (custRows[i][2]?.toString() || "").replace(/[^0-9]/g, "");
     if (rowPhoneRaw === phoneRaw) {
       existingIndex = i;
       break;
@@ -347,7 +347,7 @@ try {
   const pointsEarned = pointsRedeemed > 0 ? 0 : Math.floor((finalTotal / 100) * earnRate);
 
   if (existingIndex === -1) {
-    // New customer: append to bottom (no gaps, no blank rows)
+    // New customer: append to bottom
     customerId = generateCustomerId(custRows.filter((row: any) => row[0]?.toString().startsWith("LMS-")));
     await gsapi.spreadsheets.values.append({
       spreadsheetId: STORE_SHEET_ID,
@@ -368,7 +368,7 @@ try {
     });
     console.log(`New customer appended with ID ${customerId}`);
   } else {
-    // Existing customer: update in place
+    // Existing customer: update the same row (no append)
     customerId = custRows[existingIndex][0];
     const existing = custRows[existingIndex];
     const currentSpend = Number(existing[5]) || 0;
@@ -378,7 +378,7 @@ try {
       ? currentPoints - (redeemRate > 0 ? pointsRedeemed / redeemRate : 0)
       : currentPoints + pointsEarned;
 
-    const updateRow = existingIndex + 2;
+    const updateRow = existingIndex + 2; // +2 because sheet rows are 1-indexed and we have header
 
     // Update name if provided and different
     if (customer.name && customer.name !== existing[1]) {
@@ -391,7 +391,7 @@ try {
     }
 
     // Update phone if changed (normalized)
-    if (phoneRaw !== existing[2]?.toString().replace(/[^0-9]/g, "")) {
+    if (phoneRaw !== (existing[2]?.toString().replace(/[^0-9]/g, "") || "")) {
       await gsapi.spreadsheets.values.update({
         spreadsheetId: STORE_SHEET_ID,
         range: `Customers!C${updateRow}`,
@@ -400,7 +400,7 @@ try {
       });
     }
 
-    // Update lastVisit, spend, bills, points
+    // Update lastVisit (E), spend (F), bills (G), points (H)
     await gsapi.spreadsheets.values.update({
       spreadsheetId: STORE_SHEET_ID,
       range: `Customers!E${updateRow}:H${updateRow}`,
@@ -414,7 +414,7 @@ try {
         ]],
       },
     });
-    console.log(`Existing customer updated at row ${updateRow}, new spend: ${currentSpend + finalTotal}`);
+    console.log(`Existing customer updated at row ${updateRow} (ID: ${customerId}), new spend: ${currentSpend + finalTotal}`);
   }
 } catch (err) {
   console.error("Customer upsert failed:", err);
