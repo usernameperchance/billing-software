@@ -451,81 +451,81 @@ export default function App() {
   }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode]);
 
   const addItem = async (fromBarcode = false) => {
-  if (!price) return;
-  if (!item) {
-    alert("Please enter an item name");
-    return;
-  }
+    if (!price) return;
+    if (!item) {
+      alert("Please enter an item name");
+      return;
+    }
 
-  const itemExists = allItems.some(i => i.toLowerCase() === item.toLowerCase());
-  let shadeIsValid = false;
-  let isMisc = false;
+    const itemExists = allItems.some(i => i.toLowerCase() === item.toLowerCase());
+    let shadeIsValid = false;
+    let isMisc = false;
 
-  if (itemExists) {
-    let shadesList: string[] = [];
-    if (shadeCache.current[item]) {
-      shadesList = shadeCache.current[item];
-    } else {
-      try {
-        const res = await fetch(`/api/core?action=getShades&item=${encodeURIComponent(item)}`);
-        const data = await res.json();
-        shadesList = data.shades || [];
-        shadeCache.current[item] = shadesList;
-      } catch (err) {
-        console.error("Failed to fetch shades", err);
-        shadesList = [];
+    if (itemExists) {
+      let shadesList: string[] = [];
+      if (shadeCache.current[item]) {
+        shadesList = shadeCache.current[item];
+      } else {
+        try {
+          const res = await fetch(`/api/core?action=getShades&item=${encodeURIComponent(item)}`);
+          const data = await res.json();
+          shadesList = data.shades || [];
+          shadeCache.current[item] = shadesList;
+        } catch (err) {
+          console.error("Failed to fetch shades", err);
+          shadesList = [];
+        }
       }
-    }
-    if (shade) {
-      shadeIsValid = shadesList.some(s => s.toLowerCase() === shade.toLowerCase());
+      if (shade) {
+        shadeIsValid = shadesList.some(s => s.toLowerCase() === shade.toLowerCase());
+      } else {
+        shadeIsValid = false;
+      }
+      isMisc = !shadeIsValid;
     } else {
-      shadeIsValid = false;
+      isMisc = true;
     }
-    isMisc = !shadeIsValid;
-  } else {
-    isMisc = true;
-  }
 
-  const finalShade = shade || (isMisc ? "Misc" : "");
+    const finalShade = shade || (isMisc ? "Misc" : "");
 
-  if (itemExists && !isMisc && !finalShade) {
-    alert("Please select a shade for this item");
-    return;
-  }
+    if (itemExists && !isMisc && !finalShade) {
+      alert("Please select a shade for this item");
+      return;
+    }
 
-  const total = qty * price;
-  const profit = (price - cost) * qty;
+    const total = qty * price;
+    const profit = (price - cost) * qty;
 
-  setItems(prev => [...prev, {
-    item: item,
-    shade: finalShade,
-    qty,
-    cost: cost || 0,
-    price,
-    total,
-    profit,
-    misc: isMisc,
-  }]);
+    setItems(prev => [...prev, {
+      item: item,
+      shade: finalShade,
+      qty,
+      cost: cost || 0,
+      price,
+      total,
+      profit,
+      misc: isMisc,
+    }]);
 
-  // Reset form based on source
-  if (fromBarcode) {
-    // Barcode mode: clear everything for next scan
-    setItem("");
-    setShade("");
-    setQty(1);
-    setPrice(0);
-    setCost(0);
-    setTimeout(() => barcodeInputRef.current?.focus(), 50);
-  } else {
-    // Manual mode: keep item and shade for next entry, only reset qty and price
-    setQty(1);
-    setPrice(0);
-    // Optionally keep cost as is? Reset cost to 0
-    setCost(0);
-    // Keep item and shade unchanged
-    setTimeout(() => itemRef.current?.focus(), 50);
-  }
-};
+    // Reset form based on source
+    if (fromBarcode) {
+      // Barcode mode: clear everything for next scan
+      setItem("");
+      setShade("");
+      setQty(1);
+      setPrice(0);
+      setCost(0);
+      setTimeout(() => barcodeInputRef.current?.focus(), 50);
+    } else {
+      // Manual mode: keep item, clear shade, reset qty and price
+      setShade("");   // clear shade
+      setQty(1);
+      setPrice(0);
+      setCost(0);
+      // item stays unchanged
+      setTimeout(() => shadeRef.current?.focus(), 50);
+    }
+  };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
@@ -967,7 +967,10 @@ export default function App() {
                   onClick={() => setSelectedRow(idx)}
                 >
                   <td style={{ ...styles.td, textAlign: "center", color: "#999", fontSize: 13 }}>{idx + 1}</td>
-                  <td style={styles.td}>{i.item} {i.misc && <span style={{ fontSize: 10, color: "#e67e22" }}>(Misc)</span>}</td>
+                  <td style={styles.td}>
+                    {i.item}
+                    {i.misc && <span className="no-print" style={{ fontSize: 10, color: "#e67e22" }}> (Misc)</span>}
+                  </td>
                   <td style={styles.td}>
                     {editingShadeRow === idx ? (
                       <div style={styles.autofillWrapper}>
@@ -1029,6 +1032,7 @@ export default function App() {
                           {i.shade}
                         </span>
                         <button
+                          className="no-print"
                           onClick={() => startEditShade(idx, i.shade)}
                           style={{
                             background: "none",
