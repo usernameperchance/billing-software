@@ -517,7 +517,7 @@ export default function App() {
   setQty(1);
   setPrice(0);
   setCost(0);
-  setTimeout(() => barcodeInputRef.current?.focus(), 50);
+  setTimeout(() => itemRef.current?.focus(), 50);
 };
 
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
@@ -832,7 +832,6 @@ export default function App() {
             }}
             placeholder="Scan Barcode..."
             style={styles.smallInput}
-            autoFocus
             disabled={barcodeLoading}
           />
           {barcodeLoading && <span style={{ marginLeft: 8 }}>⌛</span>}
@@ -845,6 +844,7 @@ export default function App() {
               onChange={(e) => setItem(e.target.value)}
               placeholder="Item..."
               style={styles.smallInput}
+              autoFocus
               autoComplete="off"
             />
             {itemSuggestion && item !== itemSuggestion && (
