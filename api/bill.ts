@@ -150,6 +150,247 @@ async function restoreLoftStock(gsapi: any, item: string, rowNumber: number, ind
   });
 }
 
+// STEP 1: Validate stock availability WITHOUT deducting
+interface StockValidationResult {
+  item: string;
+  shade: string;
+  qty: number;
+  storeRowIndex: number;
+  storeStock: number;
+  loftRowIndex: number;
+  loftIndividuals: number;
+  loftPackets: number;
+  packetSize: number;
+  isValid: boolean;
+  errorMessage?: string;
+}
+
+async function validateAllItemsStock(
+  gsapi: any,
+  items: any[]
+): Promise<StockValidationResult[]> {
+  const validations: StockValidationResult[] = [];
+
+  for (const entry of items) {
+    if (entry.misc) {
+      // Skip misc items - no stock tracking
+      validations.push({
+        item: entry.item,
+        shade: entry.shade,
+        qty: entry.qty,
+        storeRowIndex: -1,
+        storeStock: 0,
+        loftRowIndex: -1,
+        loftIndividuals: 0,
+        loftPackets: 0,
+        packetSize: 0,
+        isValid: true,
+      });
+      continue;
+    }
+
+    const { item, shade, qty } = entry;
+    let storeRowIndex = -1;
+    let storeStock = 0;
+    let loftRowIndex = -1;
+    let loftIndividuals = 0;
+    let loftPackets = 0;
+    let packetSize = 5;
+
+    try {
+      // Fetch store stock
+      const storeRes = await gsapi.spreadsheets.values.get({
+        spreadsheetId: STORE_SHEET_ID,
+        range: `${escapeSheetName(item)}!B2:C`,
+      });
+      const storeRows = storeRes.data.values || [];
+      storeRowIndex = storeRows.findIndex(
+        (row: any) => row[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
+      );
+      if (storeRowIndex !== -1) {
+        storeStock = Number(storeRows[storeRowIndex][1]) || 0;
+      }
+
+      // Try to fetch loft stock
+      try {
+        const loftRes = await gsapi.spreadsheets.values.get({
+          spreadsheetId: LOFT_SHEET_ID,
+          range: `${escapeSheetName(item)}!A2:L`,
+        });
+        const loftRows = loftRes.data.values || [];
+        loftRowIndex = loftRows.findIndex(
+          (row: any) => row[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
+        );
+        if (loftRowIndex !== -1) {
+          loftIndividuals = Number(loftRows[loftRowIndex][4]) || 0;
+          loftPackets = Number(loftRows[loftRowIndex][5]) || 0;
+          packetSize = await getPacketSize(gsapi, item);
+        }
+      } catch (loftErr) {
+        // Loft sheet missing – proceed without it
+        loftRowIndex = -1;
+      }
+
+      // Calculate total available stock
+      const storeAvailable = storeRowIndex !== -1 ? storeStock : 0;
+      const loftAvailable = loftRowIndex !== -1 ? loftIndividuals + loftPackets * packetSize : 0;
+      const totalAvailable = storeAvailable + loftAvailable;
+
+      if (totalAvailable < qty) {
+        validations.push({
+          item,
+          shade,
+          qty,
+          storeRowIndex,
+          storeStock,
+          loftRowIndex,
+          loftIndividuals,
+          loftPackets,
+          packetSize,
+          isValid: false,
+          errorMessage: `Insufficient stock for ${item} Shade / Type: ${shade}. Required: ${qty}, Available: ${totalAvailable}`,
+        });
+      } else {
+        validations.push({
+          item,
+          shade,
+          qty,
+          storeRowIndex,
+          storeStock,
+          loftRowIndex,
+          loftIndividuals,
+          loftPackets,
+          packetSize,
+          isValid: true,
+        });
+      }
+    } catch (err: any) {
+      validations.push({
+        item,
+        shade,
+        qty,
+        storeRowIndex: -1,
+        storeStock: 0,
+        loftRowIndex: -1,
+        loftIndividuals: 0,
+        loftPackets: 0,
+        packetSize: 0,
+        isValid: false,
+        errorMessage: `Error checking stock for ${item}: ${err.message}`,
+      });
+    }
+  }
+
+  return validations;
+}
+
+// STEP 2: Deduct stock for all items (only called if validation passed)
+interface StockDeductionOp {
+  item: string;
+  shade: string;
+  storeRowIndex: number;
+  storeStock: number;
+  loftRowIndex: number;
+  loftIndividuals: number;
+  loftPackets: number;
+  packetSize: number;
+  qty: number;
+  timestamp: string;
+}
+
+async function deductAllItemsStock(
+  gsapi: any,
+  operations: StockDeductionOp[]
+): Promise<Map<string, any>> {
+  const appliedOperations = new Map<string, any>(); // For rollback tracking
+
+  for (const op of operations) {
+    const { item, shade, storeRowIndex, storeStock, loftRowIndex, loftIndividuals, loftPackets, packetSize, qty, timestamp } = op;
+
+    try {
+      let remaining = qty;
+      let usedFromStore = 0;
+      let usedFromLoft = 0;
+
+      // Deduct from store first
+      if (storeRowIndex !== -1) {
+        usedFromStore = Math.min(remaining, storeStock);
+        const newStoreStock = storeStock - usedFromStore;
+        remaining -= usedFromStore;
+
+        await gsapi.spreadsheets.values.update({
+          spreadsheetId: STORE_SHEET_ID,
+          range: `${escapeSheetName(item)}!C${storeRowIndex + 2}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[newStoreStock]] },
+        });
+        await gsapi.spreadsheets.values.update({
+          spreadsheetId: STORE_SHEET_ID,
+          range: `${escapeSheetName(item)}!E${storeRowIndex + 2}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[timestamp]] },
+        });
+
+        appliedOperations.set(`${item}|${shade}|store`, {
+          item,
+          shade,
+          storeRowIndex,
+          oldStoreStock: storeStock,
+          newStoreStock,
+        });
+      }
+
+      // Deduct from loft if needed
+      if (remaining > 0 && loftRowIndex !== -1) {
+        const usedIndiv = Math.min(remaining, loftIndividuals);
+        let newIndividuals = loftIndividuals - usedIndiv;
+        let newPackets = loftPackets;
+        remaining -= usedIndiv;
+
+        if (remaining > 0) {
+          const packetsNeeded = Math.ceil(remaining / packetSize);
+          const packetsToOpen = Math.min(packetsNeeded, loftPackets);
+          const ballsFromPackets = packetsToOpen * packetSize;
+          newPackets = loftPackets - packetsToOpen;
+          newIndividuals += ballsFromPackets - remaining;
+          remaining = 0;
+        }
+
+        usedFromLoft = qty - usedFromStore;
+        await gsapi.spreadsheets.values.update({
+          spreadsheetId: LOFT_SHEET_ID,
+          range: `${escapeSheetName(item)}!E${loftRowIndex + 2}:F${loftRowIndex + 2}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[newIndividuals, newPackets]] },
+        });
+
+        appliedOperations.set(`${item}|${shade}|loft`, {
+          item,
+          shade,
+          loftRowIndex,
+          oldIndividuals: loftIndividuals,
+          oldPackets: loftPackets,
+          newIndividuals,
+          newPackets,
+        });
+      }
+
+      if (usedFromLoft > 0) {
+        // Will log after bill is saved
+        appliedOperations.set(`${item}|${shade}|loftLog`, {
+          item,
+          shade,
+          usedFromLoft,
+        });
+      }
+    } catch (err) {
+      throw new Error(`Failed to deduct stock for ${item} ${shade}: ${(err as any).message}`);
+    }
+  }
+
+  return appliedOperations;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const client = await auth.getClient();
@@ -181,6 +422,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: "Invalid items" });
       }
 
+      if (items.length === 0) {
+        return res.status(400).json({ error: "Bill must contain at least one item" });
+      }
+
       if (!customer?.phone || customer.phone.replace(/[^0-9]/g, "").length < 10) {
         return res.status(400).json({ error: "Customer phone number is required (10 digits)" });
       }
@@ -198,130 +443,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await ensureBillSheetColumns(gsapi);
 
-      // Process each item (stock deduction)
-      for (const entry of items) {
-        if (entry.misc) continue; // skip stock deduction for misc items
+      // ============================================
+      // STEP 1: VALIDATE ALL ITEMS HAVE SUFFICIENT STOCK (NO MODIFICATIONS)
+      // ============================================
+      const validations = await validateAllItemsStock(gsapi, items);
+      
+      // Check for any validation failures
+      const failedValidation = validations.find(v => !v.isValid);
+      if (failedValidation) {
+        return res.status(400).json({ error: failedValidation.errorMessage });
+      }
 
-        const { item, shade, qty } = entry;
-        let storeRowIndex = -1;
-        let storeStock = 0;
-        let storeApplied = false;
-        let loftRowIndex = -1;
-        let loftIndividuals = 0;
-        let loftPackets = 0;
-        let packetSize = 5;
-        let loftApplied = false;
-        let usedFromStore = 0;
-        let usedFromLoft = 0;
+      // ============================================
+      // STEP 2: ALL ITEMS VALIDATED - NOW DEDUCT STOCK
+      // ============================================
+      const deductionOps: StockDeductionOp[] = validations
+        .filter(v => !items[items.findIndex(i => i.item === v.item && i.shade === v.shade)]?.misc)
+        .map(v => ({
+          item: v.item,
+          shade: v.shade,
+          storeRowIndex: v.storeRowIndex,
+          storeStock: v.storeStock,
+          loftRowIndex: v.loftRowIndex,
+          loftIndividuals: v.loftIndividuals,
+          loftPackets: v.loftPackets,
+          packetSize: v.packetSize,
+          qty: v.qty,
+          timestamp,
+        }));
 
-        try {
-          const storeRes = await gsapi.spreadsheets.values.get({
-            spreadsheetId: STORE_SHEET_ID,
-            range: `${escapeSheetName(item)}!B2:C`,
-          });
-          const storeRows = storeRes.data.values || [];
-          storeRowIndex = storeRows.findIndex(
-            (row: any) => row[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
-          );
-          if (storeRowIndex !== -1) {
-            storeStock = Number(storeRows[storeRowIndex][1]) || 0;
+      let appliedOps: Map<string, any> = new Map();
+      try {
+        appliedOps = await deductAllItemsStock(gsapi, deductionOps);
+      } catch (deductErr) {
+        // Rollback all stock deductions
+        console.error("Stock deduction failed, rolling back:", deductErr);
+        for (const [key, op] of appliedOps) {
+          if (key.includes("store")) {
+            try {
+              await restoreStoreStock(gsapi, op.item, op.storeRowIndex + 2, op.oldStoreStock);
+            } catch (rollbackErr) {
+              console.error(`Failed to rollback store stock for ${op.item}/${op.shade}:`, rollbackErr);
+            }
           }
+          if (key.includes("loft")) {
+            try {
+              await restoreLoftStock(gsapi, op.item, op.loftRowIndex + 2, op.oldIndividuals, op.oldPackets);
+            } catch (rollbackErr) {
+              console.error(`Failed to rollback loft stock for ${op.item}/${op.shade}:`, rollbackErr);
+            }
+          }
+        }
+        return res.status(500).json({ error: "Failed to deduct stock: " + ((deductErr as any).message || "Unknown error") });
+      }
 
+      // Log loft fallbacks
+      for (const [key, op] of appliedOps) {
+        if (key.includes("loftLog")) {
           try {
-            const loftRes = await gsapi.spreadsheets.values.get({
-              spreadsheetId: LOFT_SHEET_ID,
-              range: `${escapeSheetName(item)}!A2:L`,
-            });
-            const loftRows = loftRes.data.values || [];
-            loftRowIndex = loftRows.findIndex(
-              (row: any) => row[0]?.toString().trim().toLowerCase() === shade?.toString().trim().toLowerCase()
-            );
-            if (loftRowIndex !== -1) {
-              loftIndividuals = Number(loftRows[loftRowIndex][4]) || 0;
-              loftPackets = Number(loftRows[loftRowIndex][5]) || 0;
-              packetSize = await getPacketSize(gsapi, item);
-            }
-          } catch (loftErr) {
-            // Loft sheet missing – proceed without fallback
-            loftRowIndex = -1;
+            await logLoftFallback(gsapi, billNo, op.item, op.shade, op.usedFromLoft, timestamp);
+          } catch (logErr) {
+            console.error(`Failed to log loft fallback for ${op.item}/${op.shade}:`, logErr);
           }
-
-          const storeAvailable = storeRowIndex !== -1 ? storeStock : 0;
-          const loftAvailable = loftRowIndex !== -1 ? loftIndividuals + loftPackets * packetSize : 0;
-          if (storeAvailable + loftAvailable < qty) {
-            throw new Error(`Insufficient stock for ${item} Shade / Type: ${shade}`);
-          }
-
-          let remaining = qty;
-
-          if (storeRowIndex !== -1) {
-            usedFromStore = Math.min(remaining, storeStock);
-            const newStoreStock = storeStock - usedFromStore;
-            remaining -= usedFromStore;
-
-            await gsapi.spreadsheets.values.update({
-              spreadsheetId: STORE_SHEET_ID,
-              range: `${escapeSheetName(item)}!C${storeRowIndex + 2}`,
-              valueInputOption: "USER_ENTERED",
-              requestBody: { values: [[newStoreStock]] },
-            });
-            await gsapi.spreadsheets.values.update({
-              spreadsheetId: STORE_SHEET_ID,
-              range: `${escapeSheetName(item)}!E${storeRowIndex + 2}`,
-              valueInputOption: "USER_ENTERED",
-              requestBody: { values: [[timestamp]] },
-            });
-            storeApplied = usedFromStore > 0;
-          }
-
-          if (remaining > 0 && loftRowIndex !== -1) {
-            const usedIndiv = Math.min(remaining, loftIndividuals);
-            let newIndividuals = loftIndividuals - usedIndiv;
-            let newPackets = loftPackets;
-            remaining -= usedIndiv;
-
-            if (remaining > 0) {
-              const packetsNeeded = Math.ceil(remaining / packetSize);
-              const packetsToOpen = Math.min(packetsNeeded, loftPackets);
-              const ballsFromPackets = packetsToOpen * packetSize;
-              newPackets = loftPackets - packetsToOpen;
-              newIndividuals += ballsFromPackets - remaining;
-              remaining = 0;
-            }
-
-            usedFromLoft = qty - usedFromStore;
-            await gsapi.spreadsheets.values.update({
-              spreadsheetId: LOFT_SHEET_ID,
-              range: `${escapeSheetName(item)}!E${loftRowIndex + 2}:F${loftRowIndex + 2}`,
-              valueInputOption: "USER_ENTERED",
-              requestBody: { values: [[newIndividuals, newPackets]] },
-            });
-            loftApplied = usedFromLoft > 0;
-          }
-
-          if (remaining > 0) {
-            throw new Error(`Insufficient stock for ${item} Shade / Type: ${shade}`);
-          }
-
-          if (usedFromLoft > 0) {
-            await logLoftFallback(gsapi, billNo, item, shade, usedFromLoft, timestamp);
-          }
-        } catch (stockErr) {
-          if (storeApplied && storeRowIndex !== -1) {
-            try {
-              await restoreStoreStock(gsapi, item, storeRowIndex + 2, storeStock);
-            } catch (restoreErr) {
-              console.error(`Failed to restore store stock for ${item}/${shade}:`, restoreErr);
-            }
-          }
-          if (loftApplied && loftRowIndex !== -1) {
-            try {
-              await restoreLoftStock(gsapi, item, loftRowIndex + 2, loftIndividuals, loftPackets);
-            } catch (restoreErr) {
-              console.error(`Failed to restore loft stock for ${item}/${shade}:`, restoreErr);
-            }
-          }
-          throw stockErr;
         }
       }
 

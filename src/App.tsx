@@ -88,8 +88,37 @@ export default function App() {
         return;
       }
 
+      // Fetch updated price and cost for the new shade
+      let newPrice = items[idx].price;
+      let newCost = items[idx].cost;
+
+      try {
+        const priceRes = await fetch(
+          `/api/core?action=getPrice&item=${encodeURIComponent(itemName)}&shade=${encodeURIComponent(matchedShade)}`
+        );
+        const priceData = await priceRes.json();
+        newPrice = priceData.price || items[idx].price;
+      } catch (err) {
+        console.error("Failed to fetch new price for shade", err);
+      }
+
+      try {
+        const costRes = await fetch(
+          `/api/core?action=getCost&item=${encodeURIComponent(itemName)}&shade=${encodeURIComponent(matchedShade)}`
+        );
+        const costData = await costRes.json();
+        newCost = costData.cost || items[idx].cost;
+      } catch (err) {
+        console.error("Failed to fetch new cost for shade", err);
+      }
+
       const updated = [...items];
       updated[idx].shade = matchedShade;
+      updated[idx].price = newPrice;
+      updated[idx].cost = newCost;
+      // Recalculate total and profit with new price/cost
+      updated[idx].total = updated[idx].qty * newPrice;
+      updated[idx].profit = (newPrice - newCost) * updated[idx].qty;
       setItems(updated);
       setEditingShadeRow(null);
       setEditingShadeValue("");
@@ -272,17 +301,17 @@ export default function App() {
   const isStandard = shades.length === 1 && shades[0].toLowerCase() === "standard";
 
   const itemFuse = useMemo(() => new Fuse(allItems, {
-    threshold: 0.4,
-    distance: 100,
+    threshold: 0.6,
+    distance: 50,
     includeScore: true,
-    minMatchCharLength: 1,
+    minMatchCharLength: 2,
   }), [allItems]);
 
   const shadeFuse = useMemo(() => new Fuse(shades, {
-    threshold: 0.4,
-    distance: 100,
+    threshold: 0.6,
+    distance: 50,
     includeScore: true,
-    minMatchCharLength: 1,
+    minMatchCharLength: 2,
   }), [shades]);
 
   const itemSuggestion = item
@@ -451,7 +480,11 @@ export default function App() {
   }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode]);
 
   const addItem = async (fromBarcode = false) => {
-    if (!price) return;
+    // Allow price = 0 (free items, adjustments), but reject undefined, null, or negative
+    if (price === undefined || price === null || price < 0) {
+      alert("Please enter a valid price (0 or higher)");
+      return;
+    }
     if (!item) {
       alert("Please enter an item name");
       return;
@@ -646,7 +679,10 @@ export default function App() {
         throw new Error(data?.error || "Failed to save bill");
       }
 
+      // Clear caches after successful save
       priceCache.current = {};
+      shadeCache.current = {};
+      sessionStorage.removeItem("allItems");
       fetchNextBillNo();
 
       setItems([]);

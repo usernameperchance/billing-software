@@ -157,10 +157,11 @@ async function handleGetCustomer(gsapi: any, req: VercelRequest, res: VercelResp
   });
 
   const rows = response.data.values || [];
-  const phoneStr = phone.toString().trim();
+  const phoneNormalized = phone.toString().replace(/[^0-9]/g, "");
+  
   const matchedRow = rows.find((r: any) => {
-    const rowPhone = r[2]?.toString().trim();
-    return rowPhone === phoneStr;
+    const rowPhone = r[2]?.toString().replace(/[^0-9]/g, "");
+    return rowPhone === phoneNormalized;
   });
 
   if (!matchedRow) {
