@@ -88,7 +88,6 @@ export default function App() {
         return;
       }
 
-      // Fetch updated price and cost for the new shade
       let newPrice = items[idx].price;
       let newCost = items[idx].cost;
 
@@ -950,13 +949,13 @@ export default function App() {
 
         <hr style={styles.divider} />
 
-        {/* Customer row: name left, phone right */}
+        {/* Customer row: name left, phone right – each in a box */}
         <div style={styles.customerRow}>
-          <div style={styles.customerNameLeft}>
+          <div style={styles.customerInfoBox}>
             <span style={styles.metaLabel}>Customer</span>
             <span style={styles.metaValue}>{customerName || "Walk-in"}</span>
           </div>
-          <div style={styles.phoneRight}>
+          <div style={styles.customerInfoBox}>
             <span style={styles.metaLabel}>Phone</span>
             <span style={styles.metaValue}>{phone || "—"}</span>
           </div>
@@ -990,7 +989,7 @@ export default function App() {
                   key={idx}
                   style={{
                     ...(idx % 2 === 0 ? styles.trEven : styles.trOdd),
-                    outline: selectedRow === idx ? "2px solid #111" : "none",
+                    backgroundColor: selectedRow === idx ? styles.selectedRow.backgroundColor : undefined,
                     cursor: "pointer",
                   }}
                   onClick={() => setSelectedRow(idx)}
@@ -1311,49 +1310,51 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
+    gap: 20,
   },
-  customerNameLeft: {
+  customerInfoBox: {
+    flex: 1,
     display: "flex",
     gap: 12,
     alignItems: "center",
+    backgroundColor: "#f8f9fa",
+    padding: "8px 16px",
+    borderRadius: 8,
+    boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.03)",
   },
-  phoneRight: {
-    display: "flex",
-    gap: 12,
-    alignItems: "center",
-  },
-  logo: { width: 240, height: "auto", objectFit: "contain", display: "block", margin: "0 auto 8px auto" },
-  metaLabel: { fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, minWidth: 36 },
-  metaValue: { fontSize: 14, fontWeight: 600, color: "#111" },
-  divider: { border: "none", borderTop: "1.5px solid #e8e8e8", margin: "14px 0" },
+  logo: { width: 320, height: "auto", objectFit: "contain", display: "block", margin: "0 auto 8px auto" },
+  metaLabel: { fontSize: 12, color: "#6c757d", textTransform: "uppercase", letterSpacing: 0.5, minWidth: 36 },
+  metaValue: { fontSize: 14, fontWeight: 600, color: "#212529" },
+  divider: { border: "none", borderTop: "1.5px solid #e9ecef", margin: "14px 0" },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
-  theadRow: { background: "#111" },
+  theadRow: { backgroundColor: "#212529" },
   th: {
-    padding: "10px 12px",
+    padding: "12px 8px",
     color: "#fff",
     fontWeight: 600,
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     textAlign: "left",
-    border: "1px solid #333",
+    border: "none",
   },
   td: {
-    padding: "10px 12px",
-    color: "#222",
+    padding: "10px 8px",
+    color: "#212529",
     fontSize: 14,
-    border: "1px solid #e4e4e4",
+    borderBottom: "1px solid #e9ecef",
     verticalAlign: "middle",
   },
-  trEven: { background: "#fff" },
-  trOdd: { background: "#fafafa" },
+  trEven: { backgroundColor: "#ffffff" },
+  trOdd: { backgroundColor: "#fdfdfd" },
+  selectedRow: { backgroundColor: "#e3f2fd" }, // subtle blue highlight, no outline
   qtyControls: { display: "inline-flex", alignItems: "center", gap: 6 },
   qtyBtn: {
     width: 24,
     height: 24,
     borderRadius: 4,
-    border: "1px solid #ddd",
-    background: "#f5f5f5",
+    border: "1px solid #dee2e6",
+    background: "#f8f9fa",
     cursor: "pointer",
     fontSize: 14,
     lineHeight: 1,
@@ -1366,7 +1367,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   removeBtn: {
     background: "none",
     border: "none",
-    color: "#cc3333",
+    color: "#dc3545",
     cursor: "pointer",
     fontSize: 13,
     fontWeight: 600,
@@ -1380,19 +1381,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: 6,
     marginTop: 6,
   },
-  profitRow: { display: "flex", gap: 48, fontSize: 14, color: "#666" },
-  discountRow: { display: "flex", gap: 48, fontSize: 14, color: "#9f7448", fontWeight: 600 },
+  profitRow: { display: "flex", gap: 48, fontSize: 14, color: "#6c757d" },
+  discountRow: { display: "flex", gap: 48, fontSize: 14, color: "#e67e22", fontWeight: 600 },
   grandTotalRow: {
     display: "flex",
     gap: 48,
     fontSize: 20,
     fontWeight: 700,
-    color: "#111",
-    borderTop: "2px solid #111",
+    color: "#212529",
+    borderTop: "2px solid #212529",
     paddingTop: 8,
     marginTop: 4,
   },
-  thankYou: { textAlign: "center", marginTop: 28, fontSize: 13, color: "#aaa", letterSpacing: 0.4 },
+  thankYou: { textAlign: "center", marginTop: 28, fontSize: 13, color: "#6c757d", letterSpacing: 0.4 },
   customerCard: {
     background: "#fff",
     padding: 16,
@@ -1406,7 +1407,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: 20,
     marginTop: 10,
     fontSize: 14,
-    color: "#333",
+    color: "#212529",
   },
   actions: { display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end", flexWrap: "wrap" },
   printBtn: {
@@ -1414,7 +1415,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: 14,
     borderRadius: 8,
     border: "none",
-    background: "#111",
+    background: "#212529",
     color: "#fff",
     cursor: "pointer",
   },
