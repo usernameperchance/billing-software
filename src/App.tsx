@@ -845,8 +845,10 @@ export default function App() {
             padding: 0 !important;
             max-width: 100% !important;
           }
-          #print-bill { padding: 24px !important; }
-          #print-bill div { box-shadow: none !important; background: transparent !important; }
+          #print-bill { 
+            border: none !important;
+            box-shadow: none !important;
+          }
           .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
@@ -927,8 +929,8 @@ export default function App() {
         </div>
       </div>
 
+      {/* Professional bill area with a solid border – like a supermarket receipt */}
       <div id="print-bill" style={styles.billArea}>
-        {/* Header: centered logo, right‑aligned metadata */}
         <div style={styles.billHeader}>
           <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
           <div style={styles.metadataRight}>
@@ -949,21 +951,20 @@ export default function App() {
 
         <hr style={styles.divider} />
 
-        {/* Customer row: name left, phone right – each in a box */}
+        {/* Customer info inside the bordered area, left/right on same row */}
         <div style={styles.customerRow}>
-          <div style={styles.customerInfoBox}>
-            <span style={styles.metaLabel}>Customer</span>
+          <div style={styles.customerInfoItem}>
+            <span style={styles.metaLabel}>Customer:</span>
             <span style={styles.metaValue}>{customerName || "Walk-in"}</span>
           </div>
-          <div style={styles.customerInfoBox}>
-            <span style={styles.metaLabel}>Phone</span>
+          <div style={styles.customerInfoItem}>
+            <span style={styles.metaLabel}>Phone:</span>
             <span style={styles.metaValue}>{phone || "—"}</span>
           </div>
         </div>
 
         <hr style={styles.divider} />
 
-        {/* Bill table */}
         <table className="bill-table" style={styles.table}>
           <thead>
             <tr style={styles.theadRow}>
@@ -1155,12 +1156,12 @@ export default function App() {
                   checked={redeemPoints}
                   onChange={(e) => setRedeemPoints(e.target.checked)}
                 />
-                Redeem {customer.points} pts (₹{Math.floor(customer.points * pointsConfig.redeemRate)} off)
+                Redeem {customer.points} points (₹{Math.floor(customer.points * pointsConfig.redeemRate)} off)
               </label>
             )}
             {pointsConfig && customer.points < pointsConfig.minRedeem && (
               <span style={{ fontSize: 12, color: "#aaa" }}>
-                {pointsConfig.minRedeem - customer.points} more pts needed to redeem
+                {pointsConfig.minRedeem - customer.points} More points needed to redeem.
               </span>
             )}
           </div>
@@ -1283,8 +1284,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   billArea: {
     background: "#fff",
     borderRadius: 12,
-    padding: "10px 28px 24px 28px",
+    padding: "16px 24px",
     boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
+    border: "1px solid #dee2e6",  // Solid border around entire bill
   },
   billHeader: {
     display: "flex",
@@ -1312,20 +1314,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: 12,
     gap: 20,
   },
-  customerInfoBox: {
-    flex: 1,
+  customerInfoItem: {
     display: "flex",
     gap: 12,
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
-    padding: "8px 16px",
-    borderRadius: 8,
-    boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.03)",
+    // No background box – just clean text inside the bordered bill area
   },
   logo: { width: 320, height: "auto", objectFit: "contain", display: "block", margin: "0 auto 8px auto" },
   metaLabel: { fontSize: 12, color: "#6c757d", textTransform: "uppercase", letterSpacing: 0.5, minWidth: 36 },
   metaValue: { fontSize: 14, fontWeight: 600, color: "#212529" },
-  divider: { border: "none", borderTop: "1.5px solid #e9ecef", margin: "14px 0" },
+  divider: { border: "none", borderTop: "1px solid #e9ecef", margin: "14px 0" },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
   theadRow: { backgroundColor: "#212529" },
   th: {
@@ -1347,7 +1345,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   trEven: { backgroundColor: "#ffffff" },
   trOdd: { backgroundColor: "#fdfdfd" },
-  selectedRow: { backgroundColor: "#e3f2fd" }, // subtle blue highlight, no outline
+  selectedRow: { backgroundColor: "#e3f2fd" },
   qtyControls: { display: "inline-flex", alignItems: "center", gap: 6 },
   qtyBtn: {
     width: 24,
