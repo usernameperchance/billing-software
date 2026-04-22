@@ -951,14 +951,14 @@ export default function App() {
 
         <hr style={styles.divider} />
 
-        {/* Customer info inside the bordered area, left/right on same row */}
-        <div style={styles.customerRow}>
-          <div style={styles.customerInfoItem}>
-            <span style={styles.metaLabel}>Customer:</span>
+        {/* Customer info inside a bordered box */}
+        <div style={styles.customerBox}>
+          <div style={styles.customerBoxRow}>
+            <span style={styles.metaLabel}>Customer</span>
             <span style={styles.metaValue}>{customerName || "Walk-in"}</span>
           </div>
-          <div style={styles.customerInfoItem}>
-            <span style={styles.metaLabel}>Phone:</span>
+          <div style={styles.customerBoxRow}>
+            <span style={styles.metaLabel}>Phone</span>
             <span style={styles.metaValue}>{phone || "—"}</span>
           </div>
         </div>
@@ -1286,7 +1286,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: 12,
     padding: "16px 24px",
     boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
-    border: "1px solid #dee2e6",  // Solid border around entire bill
+    border: "2px solid #dee2e6",  // thicker solid border around entire bill
   },
   billHeader: {
     display: "flex",
@@ -1307,18 +1307,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: "center",
     marginBottom: 4,
   },
-  customerRow: {
+  customerBox: {
+    border: "1px solid #dee2e6",
+    borderRadius: 8,
+    padding: "12px 16px",
+    marginBottom: 16,
+    backgroundColor: "#f8f9fa",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
-    gap: 20,
   },
-  customerInfoItem: {
+  customerBoxRow: {
     display: "flex",
     gap: 12,
     alignItems: "center",
-    // No background box – just clean text inside the bordered bill area
   },
   logo: { width: 320, height: "auto", objectFit: "contain", display: "block", margin: "0 auto 8px auto" },
   metaLabel: { fontSize: 12, color: "#6c757d", textTransform: "uppercase", letterSpacing: 0.5, minWidth: 36 },
@@ -1334,13 +1336,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     textTransform: "uppercase",
     letterSpacing: 0.5,
     textAlign: "left",
-    border: "none",
+    border: "1px solid #495057",  // full border on header cells
   },
   td: {
     padding: "10px 8px",
     color: "#212529",
     fontSize: 14,
-    borderBottom: "1px solid #e9ecef",
+    border: "1px solid #dee2e6",  // full border on data cells
     verticalAlign: "middle",
   },
   trEven: { backgroundColor: "#ffffff" },
