@@ -116,7 +116,6 @@ export default function App() {
       updated[idx].shade = matchedShade;
       updated[idx].price = newPrice;
       updated[idx].cost = newCost;
-      // Recalculate total and profit with new price/cost
       updated[idx].total = updated[idx].qty * newPrice;
       updated[idx].profit = (newPrice - newCost) * updated[idx].qty;
       setItems(updated);
@@ -357,7 +356,7 @@ export default function App() {
       setShade(data.shade);
       setPrice(data.price);
       setBarcode("");
-      addItem(true); // auto-add to bill
+      addItem(true);
     } catch (err) {
       console.error(err);
       alert("Failed to lookup barcode");
@@ -480,7 +479,6 @@ export default function App() {
   }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode]);
 
   const addItem = async (fromBarcode = false) => {
-    // Allow price = 0 (free items, adjustments), but reject undefined, null, or negative
     if (price === undefined || price === null || price < 0) {
       alert("Please enter a valid price (0 or higher)");
       return;
@@ -540,9 +538,7 @@ export default function App() {
       misc: isMisc,
     }]);
 
-    // Reset form based on source
     if (fromBarcode) {
-      // Barcode mode: clear everything for next scan
       setItem("");
       setShade("");
       setQty(1);
@@ -550,12 +546,10 @@ export default function App() {
       setCost(0);
       setTimeout(() => barcodeInputRef.current?.focus(), 50);
     } else {
-      // Manual mode: keep item, clear shade, reset qty and price
-      setShade("");   // clear shade
+      setShade("");
       setQty(1);
       setPrice(0);
       setCost(0);
-      // item stays unchanged
       setTimeout(() => shadeRef.current?.focus(), 50);
     }
   };
@@ -679,7 +673,6 @@ export default function App() {
         throw new Error(data?.error || "Failed to save bill");
       }
 
-      // Clear caches after successful save
       priceCache.current = {};
       shadeCache.current = {};
       sessionStorage.removeItem("allItems");
@@ -936,42 +929,42 @@ export default function App() {
       </div>
 
       <div id="print-bill" style={styles.billArea}>
+        {/* Header: centered logo, right‑aligned metadata */}
         <div style={styles.billHeader}>
           <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
-          <div style={styles.billInfoRow}>
-            <div style={styles.billLeft}>
-              {customerName && (
-                <div style={styles.billDetailRow}>
-                  <span style={styles.metaLabel}>Customer</span>
-                  <span style={styles.metaValue}>{customerName}</span>
-                </div>
-              )}
-              {phone && (
-                <div style={styles.billDetailRow}>
-                  <span style={styles.metaLabel}>Phone</span>
-                  <span style={styles.metaValue}>{phone}</span>
-                </div>
-              )}
+          <div style={styles.metadataRight}>
+            <div style={styles.metaRow}>
+              <span style={styles.metaLabel}>Bill No</span>
+              <span style={styles.metaValue}>#{nextBillNo ?? "—"}</span>
             </div>
-            <div style={styles.billRight}>
-              <div style={styles.billDetailRow}>
-                <span style={styles.metaLabel}>Bill No</span>
-                <span style={styles.metaValue}>#{nextBillNo ?? "—"}</span>
-              </div>
-              <div style={styles.billDetailRow}>
-                <span style={styles.metaLabel}>Date</span>
-                <span style={styles.metaValue}>{billDate}</span>
-              </div>
-              <div style={styles.billDetailRow}>
-                <span style={styles.metaLabel}>Time</span>
-                <span style={styles.metaValue}>{billTime}</span>
-              </div>
+            <div style={styles.metaRow}>
+              <span style={styles.metaLabel}>Date</span>
+              <span style={styles.metaValue}>{billDate}</span>
+            </div>
+            <div style={styles.metaRow}>
+              <span style={styles.metaLabel}>Time</span>
+              <span style={styles.metaValue}>{billTime}</span>
             </div>
           </div>
         </div>
 
         <hr style={styles.divider} />
 
+        {/* Customer row: name left, phone right */}
+        <div style={styles.customerRow}>
+          <div style={styles.customerNameLeft}>
+            <span style={styles.metaLabel}>Customer</span>
+            <span style={styles.metaValue}>{customerName || "Walk-in"}</span>
+          </div>
+          <div style={styles.phoneRight}>
+            <span style={styles.metaLabel}>Phone</span>
+            <span style={styles.metaValue}>{phone || "—"}</span>
+          </div>
+        </div>
+
+        <hr style={styles.divider} />
+
+        {/* Bill table */}
         <table className="bill-table" style={styles.table}>
           <thead>
             <tr style={styles.theadRow}>
@@ -1301,26 +1294,30 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: 16,
     gap: 10,
   },
-  billInfoRow: {
+  metadataRight: {
+    alignSelf: "flex-end",
+    textAlign: "right",
+    marginTop: 8,
+  },
+  metaRow: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 12,
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  customerRow: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    width: "100%",
-    gap: 20,
+    alignItems: "center",
+    marginBottom: 12,
   },
-  billLeft: {
+  customerNameLeft: {
     display: "flex",
-    flexDirection: "column",
-    gap: 4,
-    textAlign: "left",
+    gap: 12,
+    alignItems: "center",
   },
-  billRight: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-    textAlign: "right",
-  },
-  billDetailRow: {
+  phoneRight: {
     display: "flex",
     gap: 12,
     alignItems: "center",
