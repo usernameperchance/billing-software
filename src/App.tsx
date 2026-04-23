@@ -1032,8 +1032,8 @@ export default function App() {
             border-bottom: 0.75px solid #e0e3e8 !important;
           }
           hr {
+            display: none !important;
             border: none !important;
-            border-top: 1px dotted #999 !important;
             margin: 12px 0 !important;
           }
         }
@@ -1652,7 +1652,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   metaLabel: { fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 800, minWidth: "52px", fontFamily: "'Montserrat', sans-serif" },
   metaValue: { fontSize: "15px", fontWeight: 700, color: "#0f172a", textAlign: "right", minWidth: "80px", fontFamily: "'Montserrat', sans-serif", letterSpacing: "-0.3px" },
   divider: { border: "none", borderTop: "1px dotted #cbd5e1", margin: "14px 0", padding: "0" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "14px", border: "1px solid #c5cad1", borderTop: "none", fontFamily: "'Montserrat', sans-serif" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "14px", border: "1px solid #c5cad1", borderTop: "none", borderBottom: "1px solid #c5cad1", fontFamily: "'Montserrat', sans-serif" },
   theadRow: { backgroundColor: "#f0f1f3" },
   th: {
     padding: "16px 13px",
@@ -1724,15 +1724,15 @@ const styles: { [key: string]: React.CSSProperties } = {
   grandTotalRow: {
     display: "flex",
     gap: "64px",
-    fontSize: "19px",
-    fontWeight: 800,
+    fontSize: "17px",
+    fontWeight: 600,
     color: "#0f172a",
-    borderTop: "1.5px solid #0f172a",
+    borderTop: "1px solid #cbd5e1",
     paddingTop: "12px",
     marginTop: "10px",
     justifyContent: "space-between",
     minWidth: "260px",
-    letterSpacing: "-0.8px",
+    letterSpacing: "-0.3px",
     fontFamily: "'Montserrat', sans-serif",
   },
   thankYou: { 
