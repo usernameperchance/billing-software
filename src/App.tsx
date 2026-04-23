@@ -40,6 +40,11 @@ export default function App() {
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [barcode, setBarcode] = useState("");
   const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [lastDeletedItem, setLastDeletedItem] = useState<BillItem | null>(null);
+  const [lastDeletedIdx, setLastDeletedIdx] = useState<number | null>(null);
+  const [deleteConfirmIdx, setDeleteConfirmIdx] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [savingProgress, setSavingProgress] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const shadeCache = useRef<Record<string, string[]>>({});
   const priceCache = useRef<Record<string, { price: number; qty: number }>>({});
@@ -51,6 +56,70 @@ export default function App() {
   const [editingShadeValue, setEditingShadeValue] = useState("");
   const [editShadeSuggestion, setEditShadeSuggestion] = useState<string | null>(null);
   const [validatingShade, setValidatingShade] = useState(false);
+
+  // Auto-save bill to localStorage
+  useEffect(() => {
+    if (items.length > 0) {
+      const draftBill = { items, customerName, phone, redeemPoints };
+      localStorage.setItem("billDraft", JSON.stringify(draftBill));
+    }
+  }, [items, customerName, phone, redeemPoints]);
+
+  // Show toast for a few seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Recover unsaved bill on mount
+  useEffect(() => {
+    const draft = localStorage.getItem("billDraft");
+    if (draft) {
+      try {
+        const { items: draftItems, customerName: draftName, phone: draftPhone, redeemPoints: draftRedeem } = JSON.parse(draft);
+        if (draftItems?.length > 0) {
+          const shouldRecover = window.confirm("You have an unsaved bill. Would you like to recover it?");
+          if (shouldRecover) {
+            setItems(draftItems);
+            setCustomerName(draftName || "");
+            setPhone(draftPhone || "");
+            setRedeemPoints(draftRedeem || false);
+            setToast({ message: "Bill recovered from draft", type: "success" });
+          } else {
+            localStorage.removeItem("billDraft");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to recover bill draft:", err);
+      }
+    }
+  }, []);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+  };
+
+  const confirmDeleteItem = (idx: number) => {
+    setDeleteConfirmIdx(idx);
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmIdx(null);
+  };
+
+  const undoDelete = () => {
+    if (lastDeletedItem !== null && lastDeletedIdx !== null) {
+      const updated = [...items];
+      updated.splice(lastDeletedIdx, 0, lastDeletedItem);
+      setItems(updated);
+      setLastDeletedItem(null);
+      setLastDeletedIdx(null);
+      setSelectedRow(null);
+      showToast("Item restored", "success");
+    }
+  };
 
   const startEditShade = (idx: number, currentShade: string) => {
     if (validatingShade) return;
@@ -164,7 +233,10 @@ export default function App() {
       const res = await fetch(`/api/core?action=getCustomer&phone=${encodeURIComponent(ph.trim())}`);
       const data = await res.json();
       setCustomer(data.customer || null);
-      if (data.customer?.name) setCustomerName(data.customer.name);
+      if (data.customer?.name) {
+        setCustomerName(data.customer.name);
+        showToast(`Customer found: ${data.customer.name}`, "success");
+      }
     } catch { setCustomer(null); }
     finally { setFetchingCustomer(false); }
   };
@@ -373,6 +445,23 @@ export default function App() {
       const target = e.target as HTMLElement;
       const tag = target.tagName;
 
+      // Keyboard shortcuts
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        if (isPhoneValid && items.length > 0 && !saving) {
+          saveBill();
+        }
+        return;
+      }
+
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (isPhoneValid && items.length > 0 && !saving) {
+          saveBillAndSend();
+        }
+        return;
+      }
+
       if (e.key === "ArrowRight" && tag === "INPUT") {
         const idx = fields.findIndex(r => r.current === target);
         if (idx !== -1 && idx < fields.length - 1) {
@@ -475,7 +564,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode]);
+  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode, isPhoneValid, saving]);
 
   const addItem = async (fromBarcode = false) => {
     if (price === undefined || price === null || price < 0) {
@@ -641,6 +730,7 @@ export default function App() {
     }
 
     setSaving(true);
+    setSavingProgress(true);
 
     try {
       const res = await fetch("/api/bill", {
@@ -675,6 +765,7 @@ export default function App() {
       priceCache.current = {};
       shadeCache.current = {};
       sessionStorage.removeItem("allItems");
+      localStorage.removeItem("billDraft");
       fetchNextBillNo();
 
       setItems([]);
@@ -686,14 +777,15 @@ export default function App() {
       setPhone("");
       setRedeemPoints(false);
 
-      alert("Bill saved successfully.");
+      showToast(`Bill #${nextBillNo} saved successfully!`, "success");
       return true;
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Failed to save bill.");
+      showToast(err.message || "Failed to save bill.", "error");
       return false;
     } finally {
       setSaving(false);
+      setSavingProgress(false);
     }
   };
 
@@ -703,7 +795,7 @@ export default function App() {
 
     try {
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      alert("Bill image copied to clipboard. Paste it in the WhatsApp chat.");
+      showToast("Bill image copied to clipboard. Paste it in WhatsApp.", "success");
     } catch {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -711,7 +803,7 @@ export default function App() {
       a.download = `bill-${nextBillNo ?? "draft"}.png`;
       a.click();
       URL.revokeObjectURL(url);
-      alert("Bill image downloaded. Attach it in WhatsApp.");
+      showToast("Bill image downloaded. Attach it in WhatsApp.", "info");
     }
 
     const waLink = `https://wa.me/${cleaned}`;
@@ -725,11 +817,11 @@ export default function App() {
   const sendWhatsApp = async () => {
     if (!phone || items.length === 0) return;
     if (!isPhoneValid) {
-      alert("Invalid phone number. Please enter a 10-digit number.");
+      showToast("Invalid phone number. Please enter a 10-digit number.", "error");
       return;
     }
     const blob = await captureBillImage();
-    if (!blob) { alert("Failed to capture bill image."); return; }
+    if (!blob) { showToast("Failed to capture bill image.", "error"); return; }
     await sendWhatsAppWithBlob(blob);
   };
 
@@ -746,6 +838,7 @@ export default function App() {
     }
 
     const cleaned = normalizedPhone;
+    setSavingProgress(true);
     const blob = await captureBillImage();
     let copied = false;
 
@@ -757,11 +850,11 @@ export default function App() {
         console.error(err);
       }
     } else {
-      alert("Image fetch failed. Bill will be saved, but you'll need to attach the image manually in WhatsApp.");
+      showToast("Image fetch failed. Bill will be saved, but you'll need to attach the image manually in WhatsApp.", "error");
     }
 
     const saved = await saveBill();
-    if (!saved) return;
+    if (!saved) { setSavingProgress(false); return; }
 
     if (cleaned) {
       const waLink = `https://wa.me/${cleaned}`;
@@ -770,9 +863,10 @@ export default function App() {
       anchor.target = "_blank";
       anchor.rel = "noopener noreferrer";
       anchor.click();
-      if (copied) alert("Bill copied. Paste it in WhatsApp.");
-      else alert("Please attach the bill image manually in WhatsApp.");
+      if (copied) showToast("Bill copied. Paste it in WhatsApp.", "success");
+      else showToast("Please attach the bill image manually in WhatsApp.", "info");
     }
+    setSavingProgress(false);
   };
 
   const generateStoreRestock = async () => {
@@ -826,26 +920,58 @@ export default function App() {
   };
 
   const removeItem = (idx: number) => {
+    const deleted = items[idx];
+    setLastDeletedItem(deleted);
+    setLastDeletedIdx(idx);
     setItems(items.filter((_, i) => i !== idx));
     setSelectedRow(null);
+    setDeleteConfirmIdx(null);
+    showToast(`Item removed (Undo available)`, "info");
   };
 
   return (
     <div className="app-container" style={styles.container}>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+        
+        * {
+          font-family: 'Montserrat', sans-serif;
+        }
+        
         .bill-table {
-          border-left: 1px solid #d0d5db !important;
-          border-right: 1px solid #d0d5db !important;
+          border-left: 1px solid #c5cad1 !important;
+          border-right: 1px solid #c5cad1 !important;
         }
         .bill-table th, .bill-table td {
-          border-right: 1px solid #d0d5db !important;
+          border-right: 1px solid #c5cad1 !important;
         }
         .bill-table th:first-child, .bill-table td:first-child {
-          border-left: 1px solid #d0d5db !important;
+          border-left: 1px solid #c5cad1 !important;
         }
         .bill-table th:last-child, .bill-table td:last-child {
           border-right: none !important;
         }
+        
+        input, button {
+          font-family: 'Montserrat', sans-serif;
+        }
+        
+        input:focus {
+          outline: none;
+          box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
+          border-color: #1a1a1a !important;
+        }
+        
+        button:hover:not(:disabled) {
+          background-color: #333 !important;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        button:active:not(:disabled) {
+          transform: translateY(0);
+        }
+        
         @media print {
           .no-print { display: none !important; }
           .print-only { display: inline !important; }
@@ -853,7 +979,7 @@ export default function App() {
             margin: 0 !important; 
             padding: 0 !important; 
             background: white !important;
-            font-family: 'Segoe UI', Arial, sans-serif !important;
+            font-family: 'Montserrat', Arial, sans-serif !important;
           }
           .app-container {
             background: white !important;
@@ -864,7 +990,7 @@ export default function App() {
             max-width: 100% !important;
           }
           #print-bill { 
-            border: 2px solid #000 !important;
+            border: 1.5px solid #000 !important;
             box-shadow: none !important;
             border-radius: 0 !important;
             margin: 0 !important;
@@ -892,28 +1018,132 @@ export default function App() {
             background-color: inherit !important;
           }
           .bill-table th {
-            background-color: #f3f4f6 !important;
-            border-bottom: 2px solid #000 !important;
-            border-top: 2px solid #000 !important;
+            background-color: #f0f1f3 !important;
+            border-bottom: 1.5px solid #000 !important;
+            border-top: 1.5px solid #000 !important;
           }
           .bill-table tr:nth-child(odd) {
             background-color: #ffffff !important;
           }
           .bill-table tr:nth-child(even) {
-            background-color: #f9fafb !important;
+            background-color: #fafbfc !important;
           }
           .bill-table td {
-            border-bottom: 1px solid #e5e7eb !important;
+            border-bottom: 0.75px solid #e0e3e8 !important;
           }
           hr {
             border: none !important;
-            border-top: 1px dotted #000 !important;
+            border-top: 1px dotted #999 !important;
             margin: 12px 0 !important;
           }
         }
       `}</style>
 
+      {/* Toast Notification */}
+      {toast && (
+        <div style={{
+          position: "fixed",
+          bottom: "24px",
+          right: "24px",
+          background: toast.type === 'success' ? '#10b981' : toast.type === 'error' ? '#ef4444' : '#3b82f6',
+          color: '#fff',
+          padding: "14px 20px",
+          borderRadius: "0px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          fontSize: "13px",
+          fontWeight: 600,
+          zIndex: 9999,
+          maxWidth: "300px",
+          animation: "slideIn 0.3s ease",
+          fontFamily: "'Montserrat', sans-serif",
+          letterSpacing: "0.3px",
+        }}>
+          {toast.message}
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirmIdx !== null && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.4)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9998,
+        }}>
+          <div style={{
+            background: "#fff",
+            padding: "24px",
+            borderRadius: "0px",
+            boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+            maxWidth: "400px",
+            fontFamily: "'Montserrat', sans-serif",
+          }}>
+            <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>Delete Item?</h3>
+            <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "#64748b", lineHeight: "1.5" }}>
+              Are you sure you want to delete "<strong>{items[deleteConfirmIdx]?.item}</strong>"? You can undo this action.
+            </p>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={cancelDelete}
+                style={{
+                  padding: "10px 18px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  border: "1px solid #cbd5e1",
+                  background: "#f1f5f9",
+                  color: "#334155",
+                  cursor: "pointer",
+                  borderRadius: "0px",
+                  fontFamily: "'Montserrat', sans-serif",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { removeItem(deleteConfirmIdx); }}
+                style={{
+                  padding: "10px 18px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  border: "none",
+                  background: "#dc2626",
+                  color: "#fff",
+                  cursor: "pointer",
+                  borderRadius: "0px",
+                  fontFamily: "'Montserrat', sans-serif",
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateX(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+      `}</style>
+
       <h1 className="no-print" style={styles.title}>Billing Counter</h1>
+      <div className="no-print" style={{ textAlign: "center", fontSize: "11px", color: "#64748b", marginBottom: "20px", letterSpacing: "0.3px", fontFamily: "'Montserrat', sans-serif" }}>
+        <span style={{ fontWeight: 700, textTransform: "uppercase" }}>Keyboard Shortcuts:</span> Enter to add • Tab for autocomplete • Ctrl+S to save • Ctrl+Enter to save & send
+      </div>
+
       <div className="no-print" style={styles.card}>
         <div style={styles.row}>
           <input
@@ -1151,7 +1381,7 @@ export default function App() {
                   <td style={{ ...styles.td, textAlign: "right", paddingRight: "20px" }}>₹{i.price}</td>
                   <td style={{ ...styles.td, textAlign: "right", fontWeight: 700, paddingRight: "20px" }}>₹{i.total}</td>
                   <td className="no-print" style={{ ...styles.td, textAlign: "center" }}>
-                    <button style={styles.removeBtn} onClick={(e) => { e.stopPropagation(); removeItem(idx); }}>✕</button>
+                    <button style={styles.removeBtn} onClick={(e) => { e.stopPropagation(); confirmDeleteItem(idx); }}>✕</button>
                   </td>
                 </tr>
               ))
@@ -1198,19 +1428,19 @@ export default function App() {
               setPhone(e.target.value);
               lookupCustomer(e.target.value);
             }}
-            placeholder="Phone (10 digits)..."
-            style={styles.smallInput}
+            placeholder="Phone (10 digits)... *"
+            style={{...styles.smallInput, borderColor: phone.trim().length > 0 && !isPhoneValid ? '#ef4444' : '#cbd5e1'}}
           />
-          {fetchingCustomer && <span style={{ fontSize: 13, color: "#888" }}>Looking up...</span>}
+          {fetchingCustomer && <span style={{ fontSize: 13, color: "#888", fontFamily: "'Montserrat', sans-serif" }}>Looking up...</span>}
         </div>
         {!isPhoneValid && phone.trim().length > 0 && (
-          <div style={{ fontSize: 12, color: "#cc3333", marginTop: 4 }}>Enter a valid 10-digit phone number</div>
+          <div style={{ fontSize: 12, color: "#cc3333", marginTop: 4, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>⚠ Enter a valid 10-digit phone number</div>
         )}
         {customer && (
           <div style={styles.customerInfo}>
             <span>👤 {customer.name} — {customer.points} pts</span>
             {pointsConfig && customer.points >= pointsConfig.minRedeem && (
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
                 <input
                   type="checkbox"
                   checked={redeemPoints}
@@ -1220,23 +1450,35 @@ export default function App() {
               </label>
             )}
             {pointsConfig && customer.points < pointsConfig.minRedeem && (
-              <span style={{ fontSize: 12, color: "#aaa" }}>
+              <span style={{ fontSize: 12, color: "#aaa", fontFamily: "'Montserrat', sans-serif" }}>
                 {pointsConfig.minRedeem - customer.points} More points needed to redeem.
               </span>
             )}
           </div>
         )}
         {!customer && phone.replace(/[^0-9]/g, "").length >= 10 && !fetchingCustomer && (
-          <div style={{ fontSize: 13, color: "#888", marginTop: 6 }}>New customer — will be registered on save</div>
+          <div style={{ fontSize: 13, color: "#888", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 500 }}>🆕 New customer — will be registered on save</div>
         )}
         {customer && !customerMatchesPhone && (
-          <div style={{ fontSize: 12, color: "#b56a00", marginTop: 6 }}>
-            Customer lookup does not match the current phone number yet.
+          <div style={{ fontSize: 12, color: "#b56a00", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
+            ⏳ Customer lookup does not match the current phone number yet.
           </div>
         )}
       </div>
 
       <div className="no-print" style={styles.actions}>
+        {lastDeletedItem && (
+          <button
+            style={{
+              ...styles.printBtn,
+              background: "#8b5cf6",
+            }}
+            onClick={undoDelete}
+          >
+            ↶ Undo Delete
+          </button>
+        )}
+
         <button
           style={{
             ...styles.printBtn,
@@ -1268,24 +1510,24 @@ export default function App() {
         <button
           style={{
             ...styles.printBtn,
-            opacity: (saving || items.length === 0 || !isPhoneValid) ? 0.6 : 1,
+            opacity: (savingProgress || items.length === 0 || !isPhoneValid) ? 0.6 : 1,
           }}
           onClick={saveBill}
-          disabled={saving || items.length === 0 || !isPhoneValid}
+          disabled={savingProgress || items.length === 0 || !isPhoneValid}
         >
-          {saving ? "Saving..." : "💾 Save to Sheets"}
+          {savingProgress ? "⏳ Saving..." : "💾 Save to Sheets"}
         </button>
 
         <button
           style={{
             ...styles.printBtn,
             background: "#0a6ed1",
-            opacity: (saving || items.length === 0 || !isPhoneValid) ? 0.6 : 1,
+            opacity: (savingProgress || items.length === 0 || !isPhoneValid) ? 0.6 : 1,
           }}
           onClick={saveBillAndSend}
-          disabled={saving || items.length === 0 || !isPhoneValid}
+          disabled={savingProgress || items.length === 0 || !isPhoneValid}
         >
-          {saving ? "Saving..." : "💾📲 Save & Send"}
+          {savingProgress ? "⏳ Saving..." : "💾📲 Save & Send"}
         </button>
       </div>
     </div>
@@ -1294,81 +1536,86 @@ export default function App() {
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    maxWidth: 880,
-    margin: "32px auto",
-    fontFamily: "'Segoe UI', 'Montserrat', Arial, sans-serif",
-    background: "#f5f7fa",
-    padding: "24px",
-    borderRadius: "2px",
+    maxWidth: 900,
+    margin: "28px auto",
+    fontFamily: "'Montserrat', sans-serif",
+    background: "#f8f9fb",
+    padding: "28px",
+    borderRadius: "0px",
   },
   title: { 
     textAlign: "center", 
-    marginBottom: "24px", 
+    marginBottom: "28px", 
     fontWeight: 800, 
-    fontSize: "28px", 
-    letterSpacing: "-0.5px",
-    color: "#1a1a1a",
+    fontSize: "32px", 
+    letterSpacing: "-1px",
+    color: "#0f172a",
     textTransform: "uppercase",
+    fontFamily: "'Montserrat', sans-serif",
   },
   card: {
     background: "#ffffff",
-    padding: "20px 24px",
-    borderRadius: "2px",
-    marginBottom: "24px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-    border: "1px solid #e8ebed",
+    padding: "24px",
+    borderRadius: "0px",
+    marginBottom: "28px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+    border: "1px solid #e2e8f0",
   },
   row: { display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" },
   smallInput: {
     flex: 1,
     padding: "12px 14px",
     fontSize: "14px",
-    borderRadius: "2px",
-    border: "1px solid #d0d5db",
+    borderRadius: "0px",
+    border: "1px solid #cbd5e1",
     outline: "none",
-    background: "#fafbfc",
-    fontFamily: "inherit",
-    transition: "border-color 0.2s, background-color 0.2s",
+    background: "#fbfcfd",
+    fontFamily: "'Montserrat', sans-serif",
+    transition: "border-color 0.2s, box-shadow 0.2s",
+    fontWeight: 500,
   },
   autofillWrapper: { position: "relative", flex: 1 },
   suggestion: {
     position: "absolute",
     left: "14px",
     top: "12px",
-    color: "#b5bdc3",
+    color: "#a8adb8",
     pointerEvents: "none",
     fontSize: "14px",
-    fontFamily: "inherit",
-    opacity: 0.8,
+    fontFamily: "'Montserrat', sans-serif",
+    opacity: 0.7,
+    fontWeight: 500,
   },
   button: {
-    padding: "12px 22px",
+    padding: "12px 24px",
     fontSize: "13px",
-    fontWeight: 600,
-    borderRadius: "2px",
+    fontWeight: 700,
+    borderRadius: "0px",
     border: "none",
-    background: "#1a1a1a",
+    background: "#0f172a",
     color: "#fff",
     cursor: "pointer",
     whiteSpace: "nowrap",
-    transition: "background-color 0.2s",
+    transition: "all 0.2s ease",
+    fontFamily: "'Montserrat', sans-serif",
+    letterSpacing: "0.3px",
   },
   billArea: {
     background: "#ffffff",
     borderRadius: "0px",
-    padding: "28px 32px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-    border: "2px solid #1a1a1a",
+    padding: "32px 36px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+    border: "1.5px solid #1a1a1a",
     pageBreakInside: "avoid",
   },
   billHeader: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    marginBottom: "8px",
-    gap: "8px",
-    paddingBottom: "16px",
-    borderBottom: "1px dotted #d0d5db",
+    marginBottom: "12px",
+    gap: "10px",
+    paddingBottom: "18px",
+    borderBottom: "1px dotted #cbd5e1",
   },
   metadataRight: {
     alignSelf: "flex-end",
@@ -1384,138 +1631,153 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: "13px",
   },
   customerBox: {
-    border: "1px solid #d0d5db",
+    border: "1px solid #e2e8f0",
     borderRadius: "0px",
-    padding: "14px 16px",
+    padding: "16px 18px",
     marginBottom: "0px",
-    marginTop: "12px",
-    backgroundColor: "#f9fafb",
+    marginTop: "14px",
+    backgroundColor: "#f8f9fb",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    borderBottom: "1px dotted #d0d5db",
+    borderBottom: "1px dotted #cbd5e1",
+    fontFamily: "'Montserrat', sans-serif",
   },
   customerBoxRow: {
     display: "flex",
-    gap: "16px",
+    gap: "18px",
     alignItems: "center",
   },
-  logo: { width: "280px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 12px auto" },
-  metaLabel: { fontSize: "11px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, minWidth: "48px" },
-  metaValue: { fontSize: "14px", fontWeight: 700, color: "#1a1a1a", textAlign: "right", minWidth: "80px" },
-  divider: { border: "none", borderTop: "1px dotted #d0d5db", margin: "12px 0", padding: "0" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "12px", border: "1px solid #d0d5db", borderTop: "none" },
-  theadRow: { backgroundColor: "#f3f4f6" },
+  logo: { width: "300px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 14px auto" },
+  metaLabel: { fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 800, minWidth: "52px", fontFamily: "'Montserrat', sans-serif" },
+  metaValue: { fontSize: "15px", fontWeight: 700, color: "#0f172a", textAlign: "right", minWidth: "80px", fontFamily: "'Montserrat', sans-serif", letterSpacing: "-0.3px" },
+  divider: { border: "none", borderTop: "1px dotted #cbd5e1", margin: "14px 0", padding: "0" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "14px", border: "1px solid #c5cad1", borderTop: "none", fontFamily: "'Montserrat', sans-serif" },
+  theadRow: { backgroundColor: "#f0f1f3" },
   th: {
-    padding: "14px 12px",
-    color: "#374151",
-    fontWeight: 700,
-    fontSize: "11px",
+    padding: "16px 13px",
+    color: "#334155",
+    fontWeight: 800,
+    fontSize: "10px",
     textTransform: "uppercase",
-    letterSpacing: "0.6px",
+    letterSpacing: "0.8px",
     textAlign: "left",
-    borderBottom: "2px solid #1a1a1a",
-    borderTop: "2px solid #1a1a1a",
+    borderBottom: "1.5px solid #0f172a",
+    borderTop: "1.5px solid #0f172a",
+    fontFamily: "'Montserrat', sans-serif",
   },
   td: {
-    padding: "12px 12px",
-    color: "#1a1a1a",
+    padding: "13px 13px",
+    color: "#1e293b",
     fontSize: "13px",
-    borderBottom: "1px solid #e5e7eb",
+    borderBottom: "0.75px solid #e0e3e8",
     verticalAlign: "middle",
+    fontFamily: "'Montserrat', sans-serif",
+    fontWeight: 500,
   },
   trEven: { backgroundColor: "#ffffff" },
-  trOdd: { backgroundColor: "#f9fafb" },
-  selectedRow: { backgroundColor: "#eff6ff" },
+  trOdd: { backgroundColor: "#fbfcfd" },
+  selectedRow: { backgroundColor: "#f0f4f8" },
   qtyControls: { display: "inline-flex", alignItems: "center", gap: "6px" },
   qtyBtn: {
-    width: "26px",
-    height: "26px",
-    borderRadius: "2px",
-    border: "1px solid #d0d5db",
-    background: "#f3f4f6",
+    width: "28px",
+    height: "28px",
+    borderRadius: "0px",
+    border: "1px solid #cbd5e1",
+    background: "#f1f5f9",
     cursor: "pointer",
     fontSize: "13px",
-    fontWeight: 600,
+    fontWeight: 700,
     lineHeight: 1,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     padding: "0",
-    transition: "background-color 0.2s",
+    transition: "all 0.2s ease",
+    fontFamily: "'Montserrat', sans-serif",
+    color: "#0f172a",
   },
-  qtyNum: { minWidth: "24px", textAlign: "center", fontWeight: 700, fontSize: "13px" },
+  qtyNum: { minWidth: "28px", textAlign: "center", fontWeight: 700, fontSize: "13px", fontFamily: "'Montserrat', sans-serif" },
   removeBtn: {
     background: "none",
     border: "none",
-    color: "#ef4444",
+    color: "#dc2626",
     cursor: "pointer",
-    fontSize: "14px",
+    fontSize: "15px",
     fontWeight: 700,
     padding: "2px 6px",
-    borderRadius: "2px",
+    borderRadius: "0px",
+    transition: "color 0.2s",
+    fontFamily: "'Montserrat', sans-serif",
   },
   totalsBlock: {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-end",
-    gap: "8px",
-    marginTop: "12px",
-    paddingTop: "12px",
-    borderTop: "1px dotted #d0d5db",
+    gap: "10px",
+    marginTop: "14px",
+    paddingTop: "14px",
+    borderTop: "1px dotted #cbd5e1",
   },
-  profitRow: { display: "flex", gap: "60px", fontSize: "13px", color: "#6b7280", justifyContent: "space-between", minWidth: "240px" },
-  discountRow: { display: "flex", gap: "60px", fontSize: "14px", color: "#059669", fontWeight: 700, justifyContent: "space-between", minWidth: "240px" },
+  profitRow: { display: "flex", gap: "64px", fontSize: "13px", color: "#64748b", justifyContent: "space-between", minWidth: "260px", fontFamily: "'Montserrat', sans-serif", fontWeight: 600 },
+  discountRow: { display: "flex", gap: "64px", fontSize: "14px", color: "#059669", fontWeight: 800, justifyContent: "space-between", minWidth: "260px", fontFamily: "'Montserrat', sans-serif", letterSpacing: "-0.3px" },
   grandTotalRow: {
     display: "flex",
-    gap: "60px",
-    fontSize: "18px",
+    gap: "64px",
+    fontSize: "19px",
     fontWeight: 800,
-    color: "#1a1a1a",
-    borderTop: "2px solid #1a1a1a",
-    paddingTop: "10px",
-    marginTop: "8px",
+    color: "#0f172a",
+    borderTop: "1.5px solid #0f172a",
+    paddingTop: "12px",
+    marginTop: "10px",
     justifyContent: "space-between",
-    minWidth: "240px",
-    letterSpacing: "-0.5px",
+    minWidth: "260px",
+    letterSpacing: "-0.8px",
+    fontFamily: "'Montserrat', sans-serif",
   },
   thankYou: { 
     textAlign: "center", 
-    marginTop: "20px", 
-    paddingTop: "16px",
-    borderTop: "1px dotted #d0d5db",
-    fontSize: "12px", 
-    color: "#4b5563", 
-    letterSpacing: "0.3px",
-    fontWeight: 500,
+    marginTop: "22px", 
+    paddingTop: "18px",
+    borderTop: "1px dotted #cbd5e1",
+    fontSize: "11px", 
+    color: "#475569", 
+    letterSpacing: "0.4px",
+    fontWeight: 700,
     textTransform: "uppercase",
+    fontFamily: "'Montserrat', sans-serif",
   },
   customerCard: {
     background: "#ffffff",
-    padding: "20px 24px",
-    borderRadius: "2px",
-    marginTop: "20px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-    border: "1px solid #e8ebed",
+    padding: "24px",
+    borderRadius: "0px",
+    marginTop: "24px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+    border: "1px solid #e2e8f0",
   },
   customerInfo: {
     display: "flex",
     alignItems: "center",
     gap: "20px",
-    marginTop: "12px",
+    marginTop: "14px",
     fontSize: "13px",
-    color: "#1a1a1a",
-  },
-  actions: { display: "flex", gap: "10px", marginTop: "20px", justifyContent: "flex-end", flexWrap: "wrap" },
-  printBtn: {
-    padding: "12px 20px",
-    fontSize: "13px",
+    color: "#1e293b",
+    fontFamily: "'Montserrat', sans-serif",
     fontWeight: 600,
-    borderRadius: "2px",
+  },
+  actions: { display: "flex", gap: "10px", marginTop: "24px", justifyContent: "flex-end", flexWrap: "wrap" },
+  printBtn: {
+    padding: "12px 24px",
+    fontSize: "12px",
+    fontWeight: 700,
+    borderRadius: "0px",
     border: "none",
-    background: "#1a1a1a",
+    background: "#0f172a",
     color: "#fff",
     cursor: "pointer",
-    transition: "background-color 0.2s",
+    transition: "all 0.2s ease",
+    fontFamily: "'Montserrat', sans-serif",
+    letterSpacing: "0.3px",
+    textTransform: "uppercase",
   },
 };
