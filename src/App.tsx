@@ -836,9 +836,14 @@ export default function App() {
         @media print {
           .no-print { display: none !important; }
           .print-only { display: inline !important; }
-          body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
+          body, html { 
+            margin: 0 !important; 
+            padding: 0 !important; 
+            background: white !important;
+            font-family: 'Segoe UI', Arial, sans-serif !important;
+          }
           .app-container {
-            background: transparent !important;
+            background: white !important;
             box-shadow: none !important;
             border-radius: 0 !important;
             margin: 0 !important;
@@ -846,10 +851,41 @@ export default function App() {
             max-width: 100% !important;
           }
           #print-bill { 
-            border: none !important;
+            border: 2px solid #000 !important;
             box-shadow: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            padding: 28px 32px !important;
+            page-break-inside: avoid !important;
           }
-          .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .bill-table {
+            page-break-inside: avoid !important;
+          }
+          .bill-table td, .bill-table th { 
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color: #000 !important;
+            background-color: inherit !important;
+          }
+          .bill-table th {
+            background-color: #f3f4f6 !important;
+            border-bottom: 2px solid #000 !important;
+            border-top: 2px solid #000 !important;
+          }
+          .bill-table tr:nth-child(odd) {
+            background-color: #ffffff !important;
+          }
+          .bill-table tr:nth-child(even) {
+            background-color: #f9fafb !important;
+          }
+          .bill-table td {
+            border-bottom: 1px solid #e5e7eb !important;
+          }
+          hr {
+            border: none !important;
+            border-top: 1px dotted #000 !important;
+            margin: 12px 0 !important;
+          }
         }
       `}</style>
 
@@ -933,18 +969,18 @@ export default function App() {
       <div id="print-bill" style={styles.billArea}>
         <div style={styles.billHeader}>
           <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
-          <div style={styles.metadataRight}>
-            <div style={styles.metaRow}>
-              <span style={styles.metaLabel}>Bill No</span>
-              <span style={styles.metaValue}>#{nextBillNo ?? "—"}</span>
+          <div style={{ ...styles.metadataRight, width: "100%", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px", paddingTop: "8px", marginTop: "0px" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ ...styles.metaLabel, textAlign: "center", display: "block", marginBottom: "4px" }}>Bill No</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a", textAlign: "center" }}>#{nextBillNo ?? "—"}</div>
             </div>
-            <div style={styles.metaRow}>
-              <span style={styles.metaLabel}>Date</span>
-              <span style={styles.metaValue}>{billDate}</span>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ ...styles.metaLabel, textAlign: "center", display: "block", marginBottom: "4px" }}>Date</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a", textAlign: "center" }}>{billDate}</div>
             </div>
-            <div style={styles.metaRow}>
-              <span style={styles.metaLabel}>Time</span>
-              <span style={styles.metaValue}>{billTime}</span>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ ...styles.metaLabel, textAlign: "center", display: "block", marginBottom: "4px" }}>Time</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a", textAlign: "center" }}>{billTime}</div>
             </div>
           </div>
         </div>
@@ -955,11 +991,11 @@ export default function App() {
         <div style={styles.customerBox}>
           <div style={styles.customerBoxRow}>
             <span style={styles.metaLabel}>Customer</span>
-            <span style={styles.metaValue}>{customerName || "Walk-in"}</span>
+            <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{customerName || "Walk-in"}</span>
           </div>
           <div style={styles.customerBoxRow}>
             <span style={styles.metaLabel}>Phone</span>
-            <span style={styles.metaValue}>{phone || "—"}</span>
+            <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{phone || "—"}</span>
           </div>
         </div>
 
@@ -972,8 +1008,8 @@ export default function App() {
               <th style={{ ...styles.th, width: "30%" }}>Item</th>
               <th style={{ ...styles.th, width: "28%" }}>Shade / Type</th>
               <th style={{ ...styles.th, width: "10%", textAlign: "center" }}>Qty</th>
-              <th style={{ ...styles.th, width: "12%", textAlign: "right" }}>Price</th>
-              <th style={{ ...styles.th, width: "13%", textAlign: "right" }}>Total</th>
+              <th style={{ ...styles.th, width: "12%", textAlign: "right", paddingRight: "20px" }}>Price</th>
+              <th style={{ ...styles.th, width: "13%", textAlign: "right", paddingRight: "20px" }}>Total</th>
               <th className="no-print" style={{ ...styles.th, width: "5%" }}></th>
             </tr>
           </thead>
@@ -1088,8 +1124,8 @@ export default function App() {
                     </span>
                     <span className="print-only" style={{ display: "none" }}>{i.qty}</span>
                   </td>
-                  <td style={{ ...styles.td, textAlign: "right" }}>₹{i.price}</td>
-                  <td style={{ ...styles.td, textAlign: "right", fontWeight: 600 }}>₹{i.total}</td>
+                  <td style={{ ...styles.td, textAlign: "right", paddingRight: "20px" }}>₹{i.price}</td>
+                  <td style={{ ...styles.td, textAlign: "right", fontWeight: 700, paddingRight: "20px" }}>₹{i.total}</td>
                   <td className="no-print" style={{ ...styles.td, textAlign: "center" }}>
                     <button style={styles.removeBtn} onClick={(e) => { e.stopPropagation(); removeItem(idx); }}>✕</button>
                   </td>
@@ -1101,12 +1137,12 @@ export default function App() {
 
         <hr style={styles.divider} />
         <div style={styles.totalsBlock}>
-          <div className="no-print" style={styles.profitRow}>
+          <div className="no-print" style={{ ...styles.profitRow, display: "flex", justifyContent: "space-between", paddingRight: "8px" }}>
             <span>Net Profit</span>
             <span>₹{grandProfit}</span>
           </div>
           {discountAmt > 0 && (
-            <div style={styles.discountRow}>
+            <div style={{ ...styles.discountRow, display: "flex", justifyContent: "space-between", paddingRight: "8px" }}>
               <span>
                 {pointsDiscount > 0
                   ? `Points Redeemed`
@@ -1115,7 +1151,7 @@ export default function App() {
               <span>− ₹{discountAmt}</span>
             </div>
           )}
-          <div style={styles.grandTotalRow}>
+          <div style={{ ...styles.grandTotalRow, display: "flex", justifyContent: "space-between" }}>
             <span>Grand Total</span>
             <span>₹{finalTotal}</span>
           </div>
@@ -1234,189 +1270,228 @@ export default function App() {
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    maxWidth: 860,
-    margin: "36px auto",
-    fontFamily: "Montserrat, Arial, sans-serif",
-    background: "#f4f6f8",
-    padding: 20,
-    borderRadius: 14,
+    maxWidth: 880,
+    margin: "32px auto",
+    fontFamily: "'Segoe UI', 'Montserrat', Arial, sans-serif",
+    background: "#f5f7fa",
+    padding: "24px",
+    borderRadius: "2px",
   },
-  title: { textAlign: "center", marginBottom: 20, fontWeight: 700, fontSize: 22, letterSpacing: 0.5 },
+  title: { 
+    textAlign: "center", 
+    marginBottom: "24px", 
+    fontWeight: 800, 
+    fontSize: "28px", 
+    letterSpacing: "-0.5px",
+    color: "#1a1a1a",
+    textTransform: "uppercase",
+  },
   card: {
-    background: "#fff",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
+    background: "#ffffff",
+    padding: "20px 24px",
+    borderRadius: "2px",
+    marginBottom: "24px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    border: "1px solid #e8ebed",
   },
-  row: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" },
+  row: { display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" },
   smallInput: {
     flex: 1,
-    padding: "11px 13px",
-    fontSize: 14,
-    borderRadius: 8,
-    border: "1px solid #e0e0e0",
+    padding: "12px 14px",
+    fontSize: "14px",
+    borderRadius: "2px",
+    border: "1px solid #d0d5db",
     outline: "none",
-    background: "transparent",
+    background: "#fafbfc",
     fontFamily: "inherit",
+    transition: "border-color 0.2s, background-color 0.2s",
   },
   autofillWrapper: { position: "relative", flex: 1 },
   suggestion: {
     position: "absolute",
-    left: 14,
-    top: 11,
-    color: "#bbb",
+    left: "14px",
+    top: "12px",
+    color: "#b5bdc3",
     pointerEvents: "none",
-    fontSize: 14,
+    fontSize: "14px",
     fontFamily: "inherit",
-    opacity: 0.7,
+    opacity: 0.8,
   },
   button: {
-    padding: "11px 20px",
-    fontSize: 14,
-    borderRadius: 8,
+    padding: "12px 22px",
+    fontSize: "13px",
+    fontWeight: 600,
+    borderRadius: "2px",
     border: "none",
-    background: "#111",
+    background: "#1a1a1a",
     color: "#fff",
     cursor: "pointer",
     whiteSpace: "nowrap",
+    transition: "background-color 0.2s",
   },
   billArea: {
-    background: "#fff",
-    borderRadius: 12,
-    padding: "16px 24px",
-    boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
-    border: "2px solid #dee2e6",  // thicker solid border around entire bill
+    background: "#ffffff",
+    borderRadius: "0px",
+    padding: "28px 32px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    border: "2px solid #1a1a1a",
+    pageBreakInside: "avoid",
   },
   billHeader: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    marginBottom: 16,
-    gap: 10,
+    marginBottom: "8px",
+    gap: "8px",
+    paddingBottom: "16px",
+    borderBottom: "1px dotted #d0d5db",
   },
   metadataRight: {
     alignSelf: "flex-end",
     textAlign: "right",
-    marginTop: 8,
+    marginTop: "8px",
   },
   metaRow: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: 12,
+    gap: "16px",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: "3px",
+    fontSize: "13px",
   },
   customerBox: {
-    border: "1px solid #dee2e6",
-    borderRadius: 8,
-    padding: "12px 16px",
-    marginBottom: 16,
-    backgroundColor: "#f8f9fa",
+    border: "1px solid #d0d5db",
+    borderRadius: "0px",
+    padding: "14px 16px",
+    marginBottom: "0px",
+    marginTop: "12px",
+    backgroundColor: "#f9fafb",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    borderBottom: "1px dotted #d0d5db",
   },
   customerBoxRow: {
     display: "flex",
-    gap: 12,
+    gap: "16px",
     alignItems: "center",
   },
-  logo: { width: 320, height: "auto", objectFit: "contain", display: "block", margin: "0 auto 8px auto" },
-  metaLabel: { fontSize: 12, color: "#6c757d", textTransform: "uppercase", letterSpacing: 0.5, minWidth: 36 },
-  metaValue: { fontSize: 14, fontWeight: 600, color: "#212529" },
-  divider: { border: "none", borderTop: "1px solid #e9ecef", margin: "14px 0" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
-  theadRow: { backgroundColor: "#212529" },
+  logo: { width: "340px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 12px auto" },
+  metaLabel: { fontSize: "11px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, minWidth: "48px" },
+  metaValue: { fontSize: "14px", fontWeight: 700, color: "#1a1a1a", textAlign: "right", minWidth: "80px" },
+  divider: { border: "none", borderTop: "1px dotted #d0d5db", margin: "12px 0", padding: "0" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "12px" },
+  theadRow: { backgroundColor: "#f3f4f6" },
   th: {
-    padding: "12px 8px",
-    color: "#fff",
-    fontWeight: 600,
-    fontSize: 12,
+    padding: "14px 12px",
+    color: "#374151",
+    fontWeight: 700,
+    fontSize: "11px",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: "0.6px",
     textAlign: "left",
-    border: "1px solid #495057",  // full border on header cells
+    borderBottom: "2px solid #1a1a1a",
+    borderTop: "2px solid #1a1a1a",
   },
   td: {
-    padding: "10px 8px",
-    color: "#212529",
-    fontSize: 14,
-    border: "1px solid #dee2e6",  // full border on data cells
+    padding: "12px 12px",
+    color: "#1a1a1a",
+    fontSize: "13px",
+    borderBottom: "1px solid #e5e7eb",
     verticalAlign: "middle",
   },
   trEven: { backgroundColor: "#ffffff" },
-  trOdd: { backgroundColor: "#fdfdfd" },
-  selectedRow: { backgroundColor: "#e3f2fd" },
-  qtyControls: { display: "inline-flex", alignItems: "center", gap: 6 },
+  trOdd: { backgroundColor: "#f9fafb" },
+  selectedRow: { backgroundColor: "#eff6ff" },
+  qtyControls: { display: "inline-flex", alignItems: "center", gap: "6px" },
   qtyBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    border: "1px solid #dee2e6",
-    background: "#f8f9fa",
+    width: "26px",
+    height: "26px",
+    borderRadius: "2px",
+    border: "1px solid #d0d5db",
+    background: "#f3f4f6",
     cursor: "pointer",
-    fontSize: 14,
+    fontSize: "13px",
+    fontWeight: 600,
     lineHeight: 1,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 0,
+    padding: "0",
+    transition: "background-color 0.2s",
   },
-  qtyNum: { minWidth: 20, textAlign: "center", fontWeight: 600 },
+  qtyNum: { minWidth: "24px", textAlign: "center", fontWeight: 700, fontSize: "13px" },
   removeBtn: {
     background: "none",
     border: "none",
-    color: "#dc3545",
+    color: "#ef4444",
     cursor: "pointer",
-    fontSize: 13,
-    fontWeight: 600,
+    fontSize: "14px",
+    fontWeight: 700,
     padding: "2px 6px",
-    borderRadius: 4,
+    borderRadius: "2px",
   },
   totalsBlock: {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-end",
-    gap: 6,
-    marginTop: 6,
+    gap: "8px",
+    marginTop: "12px",
+    paddingTop: "12px",
+    borderTop: "1px dotted #d0d5db",
   },
-  profitRow: { display: "flex", gap: 48, fontSize: 14, color: "#6c757d" },
-  discountRow: { display: "flex", gap: 48, fontSize: 14, color: "#e67e22", fontWeight: 600 },
+  profitRow: { display: "flex", gap: "60px", fontSize: "13px", color: "#6b7280", justifyContent: "space-between", minWidth: "240px" },
+  discountRow: { display: "flex", gap: "60px", fontSize: "14px", color: "#059669", fontWeight: 700, justifyContent: "space-between", minWidth: "240px" },
   grandTotalRow: {
     display: "flex",
-    gap: 48,
-    fontSize: 20,
-    fontWeight: 700,
-    color: "#212529",
-    borderTop: "2px solid #212529",
-    paddingTop: 8,
-    marginTop: 4,
+    gap: "60px",
+    fontSize: "18px",
+    fontWeight: 800,
+    color: "#1a1a1a",
+    borderTop: "2px solid #1a1a1a",
+    paddingTop: "10px",
+    marginTop: "8px",
+    justifyContent: "space-between",
+    minWidth: "240px",
+    letterSpacing: "-0.5px",
   },
-  thankYou: { textAlign: "center", marginTop: 28, fontSize: 13, color: "#6c757d", letterSpacing: 0.4 },
+  thankYou: { 
+    textAlign: "center", 
+    marginTop: "20px", 
+    paddingTop: "16px",
+    borderTop: "1px dotted #d0d5db",
+    fontSize: "12px", 
+    color: "#4b5563", 
+    letterSpacing: "0.3px",
+    fontWeight: 500,
+    textTransform: "uppercase",
+  },
   customerCard: {
-    background: "#fff",
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 16,
-    boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
+    background: "#ffffff",
+    padding: "20px 24px",
+    borderRadius: "2px",
+    marginTop: "20px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    border: "1px solid #e8ebed",
   },
   customerInfo: {
     display: "flex",
     alignItems: "center",
-    gap: 20,
-    marginTop: 10,
-    fontSize: 14,
-    color: "#212529",
+    gap: "20px",
+    marginTop: "12px",
+    fontSize: "13px",
+    color: "#1a1a1a",
   },
-  actions: { display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end", flexWrap: "wrap" },
+  actions: { display: "flex", gap: "10px", marginTop: "20px", justifyContent: "flex-end", flexWrap: "wrap" },
   printBtn: {
-    padding: "11px 20px",
-    fontSize: 14,
-    borderRadius: 8,
+    padding: "12px 20px",
+    fontSize: "13px",
+    fontWeight: 600,
+    borderRadius: "2px",
     border: "none",
-    background: "#212529",
+    background: "#1a1a1a",
     color: "#fff",
     cursor: "pointer",
+    transition: "background-color 0.2s",
   },
 };
