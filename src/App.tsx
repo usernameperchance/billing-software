@@ -833,6 +833,19 @@ export default function App() {
   return (
     <div className="app-container" style={styles.container}>
       <style>{`
+        .bill-table {
+          border-left: 1px solid #d0d5db !important;
+          border-right: 1px solid #d0d5db !important;
+        }
+        .bill-table th, .bill-table td {
+          border-right: 1px solid #d0d5db !important;
+        }
+        .bill-table th:first-child, .bill-table td:first-child {
+          border-left: 1px solid #d0d5db !important;
+        }
+        .bill-table th:last-child, .bill-table td:last-child {
+          border-right: none !important;
+        }
         @media print {
           .no-print { display: none !important; }
           .print-only { display: inline !important; }
@@ -860,6 +873,17 @@ export default function App() {
           }
           .bill-table {
             page-break-inside: avoid !important;
+            border-left: 1px solid #000 !important;
+            border-right: 1px solid #000 !important;
+          }
+          .bill-table th, .bill-table td {
+            border-right: 1px solid #000 !important;
+          }
+          .bill-table th:first-child, .bill-table td:first-child {
+            border-left: 1px solid #000 !important;
+          }
+          .bill-table th:last-child, .bill-table td:last-child {
+            border-right: none !important;
           }
           .bill-table td, .bill-table th { 
             -webkit-print-color-adjust: exact !important;
@@ -990,11 +1014,11 @@ export default function App() {
         {/* Customer info inside a bordered box */}
         <div style={styles.customerBox}>
           <div style={styles.customerBoxRow}>
-            <span style={styles.metaLabel}>Customer</span>
+            <span style={styles.metaLabel}>Customer:</span>
             <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{customerName || "Walk-in"}</span>
           </div>
           <div style={styles.customerBoxRow}>
-            <span style={styles.metaLabel}>Phone</span>
+            <span style={styles.metaLabel}>Phone:</span>
             <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{phone || "—"}</span>
           </div>
         </div>
@@ -1376,11 +1400,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: "16px",
     alignItems: "center",
   },
-  logo: { width: "340px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 12px auto" },
+  logo: { width: "280px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 12px auto" },
   metaLabel: { fontSize: "11px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, minWidth: "48px" },
   metaValue: { fontSize: "14px", fontWeight: 700, color: "#1a1a1a", textAlign: "right", minWidth: "80px" },
   divider: { border: "none", borderTop: "1px dotted #d0d5db", margin: "12px 0", padding: "0" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "12px" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "12px", border: "1px solid #d0d5db", borderTop: "none" },
   theadRow: { backgroundColor: "#f3f4f6" },
   th: {
     padding: "14px 12px",
