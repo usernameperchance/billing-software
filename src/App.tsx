@@ -1283,36 +1283,30 @@ export default function App() {
           fontFamily: "'Montserrat', sans-serif",
         }}>
           {/* LEFT: Customer Info */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1 }}>
             {customer?.customerId && (
-              <div style={{ display: "flex", gap: "8px" }}>
-                <span style={styles.metaLabel}>ID:</span>
-                <span style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>{customer.customerId}</span>
+              <div style={{ fontSize: "11px", color: "#0f172a", fontWeight: 700 }}>
+                <span style={styles.metaLabel}>ID:</span> {customer.customerId}
               </div>
             )}
-            <div style={{ display: "flex", gap: "8px" }}>
-              <span style={styles.metaLabel}>Customer:</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{customerName || "Walk-in"}</span>
+            <div style={{ fontSize: "11px", color: "#1a1a1a", fontWeight: 600 }}>
+              <span style={styles.metaLabel}>Customer:</span> {customerName || "Walk-in"}
             </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <span style={styles.metaLabel}>Phone:</span>
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{phone || "—"}</span>
+            <div style={{ fontSize: "11px", color: "#1a1a1a", fontWeight: 600 }}>
+              <span style={styles.metaLabel}>Phone:</span> {phone || "—"}
             </div>
           </div>
 
-          {/* RIGHT: Bill Details */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px", alignItems: "flex-end" }}>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ ...styles.metaLabel, textAlign: "right", display: "block", marginBottom: "4px" }}>Bill No</div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a" }}>#{nextBillNo ?? "—"}</div>
+          {/* RIGHT: Bill Details - 3 Separate Lines */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "flex-start" }}>
+            <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
+              <span style={styles.metaLabel}>Bill No:</span> #{nextBillNo ?? "—"}
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ ...styles.metaLabel, textAlign: "right", display: "block", marginBottom: "4px" }}>Date</div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a" }}>{billDate}</div>
+            <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
+              <span style={styles.metaLabel}>Date:</span> {billDate}
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ ...styles.metaLabel, textAlign: "right", display: "block", marginBottom: "4px" }}>Time</div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a" }}>{billTime}</div>
+            <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
+              <span style={styles.metaLabel}>Time:</span> {billTime}
             </div>
           </div>
         </div>
@@ -1754,10 +1748,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   metaLabel: { fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 800, minWidth: "52px", fontFamily: "'Montserrat', sans-serif" },
   metaValue: { fontSize: "15px", fontWeight: 700, color: "#0f172a", textAlign: "right", minWidth: "80px", fontFamily: "'Montserrat', sans-serif", letterSpacing: "-0.3px" },
   divider: { border: "none", borderTop: "1px dotted #cbd5e1", margin: "14px 0", padding: "0" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "14px", border: "1px solid #c5cad1", borderTop: "none", borderBottom: "1px solid #c5cad1", fontFamily: "'Montserrat', sans-serif" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "14px", border: "1px solid #c5cad1", borderTop: "none", borderBottom: "1px solid #c5cad1", fontFamily: "'Montserrat', sans-serif", userSelect: "none" },
   theadRow: { backgroundColor: "#f0f1f3" },
   th: {
-    padding: "16px 13px",
+    padding: "10px 8px",
     color: "#334155",
     fontWeight: 800,
     fontSize: "10px",
@@ -1767,15 +1761,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderBottom: "1.5px solid #0f172a",
     borderTop: "1.5px solid #0f172a",
     fontFamily: "'Montserrat', sans-serif",
+    userSelect: "none",
   },
   td: {
-    padding: "13px 13px",
+    padding: "8px 8px",
     color: "#1e293b",
     fontSize: "13px",
     borderBottom: "0.75px solid #e0e3e8",
     verticalAlign: "middle",
     fontFamily: "'Montserrat', sans-serif",
     fontWeight: 500,
+    userSelect: "none",
   },
   trEven: { backgroundColor: "#ffffff" },
   trOdd: { backgroundColor: "#fbfcfd" },
