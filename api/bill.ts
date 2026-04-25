@@ -565,7 +565,7 @@ try {
       ? currentPoints - (redeemRate > 0 ? pointsRedeemed / redeemRate : 0)
       : currentPoints + pointsEarned;
 
-    const updateRow = existingIndex + 2; // +2 because sheet rows are 1-indexed and we have header
+    const updateRow = existingIndex + 1; // +1 because custRows[0] is header (row 1), so custRows[i] is row (i+1)
 
     // Update name if provided and different
     if (customer.name && customer.name !== existing[1]) {
@@ -591,14 +591,21 @@ try {
       });
     }
 
-    // Update lastVisit (E), spend (G), bills (H), points (I)
+    // Update lastVisit (F), spend (G), bills (H), points (I)
     await gsapi.spreadsheets.values.update({
       spreadsheetId: STORE_SHEET_ID,
-      range: `Customers!F${updateRow}:I${updateRow}`,
+      range: `Customers!F${updateRow}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [[date]] },
+    });
+
+    // Update spend, bills, and points
+    await gsapi.spreadsheets.values.update({
+      spreadsheetId: STORE_SHEET_ID,
+      range: `Customers!G${updateRow}:I${updateRow}`,
       valueInputOption: "USER_ENTERED",
       requestBody: {
         values: [[
-          date,
           currentSpend + finalTotal,
           currentBills + 1,
           Math.max(0, newPoints),
