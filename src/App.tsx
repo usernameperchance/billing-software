@@ -1223,37 +1223,50 @@ export default function App() {
       <div id="print-bill" style={styles.billArea}>
         <div style={styles.billHeader}>
           <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
-          <div style={{ ...styles.metadataRight, width: "100%", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px", paddingTop: "8px", marginTop: "0px" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ ...styles.metaLabel, textAlign: "center", display: "block", marginBottom: "4px" }}>Bill No</div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a", textAlign: "center" }}>#{nextBillNo ?? "—"}</div>
+        </div>
+
+        {/* Unified info box: customer on left, bill details on right */}
+        <div style={{
+          border: "1px solid #e2e8f0",
+          borderRadius: "0px",
+          padding: "16px 18px",
+          marginBottom: "0px",
+          marginTop: "14px",
+          backgroundColor: "#f8f9fb",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "24px",
+          fontFamily: "'Montserrat', sans-serif",
+        }}>
+          {/* LEFT: Customer Info */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <span style={styles.metaLabel}>Customer:</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{customerName || "Walk-in"}</span>
             </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ ...styles.metaLabel, textAlign: "center", display: "block", marginBottom: "4px" }}>Date</div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a", textAlign: "center" }}>{billDate}</div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <span style={styles.metaLabel}>Phone:</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{phone || "—"}</span>
             </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ ...styles.metaLabel, textAlign: "center", display: "block", marginBottom: "4px" }}>Time</div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a", textAlign: "center" }}>{billTime}</div>
+          </div>
+
+          {/* RIGHT: Bill Details */}
+          <div style={{ display: "flex", gap: "32px", alignItems: "flex-start" }}>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ ...styles.metaLabel, textAlign: "right", display: "block", marginBottom: "4px" }}>Bill No</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a" }}>#{nextBillNo ?? "—"}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ ...styles.metaLabel, textAlign: "right", display: "block", marginBottom: "4px" }}>Date</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a" }}>{billDate}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ ...styles.metaLabel, textAlign: "right", display: "block", marginBottom: "4px" }}>Time</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a" }}>{billTime}</div>
             </div>
           </div>
         </div>
-
-        <hr style={styles.divider} />
-
-        {/* Customer info inside a bordered box */}
-        <div style={styles.customerBox}>
-          <div style={styles.customerBoxRow}>
-            <span style={styles.metaLabel}>Customer:</span>
-            <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{customerName || "Walk-in"}</span>
-          </div>
-          <div style={styles.customerBoxRow}>
-            <span style={styles.metaLabel}>Phone:</span>
-            <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{phone || "—"}</span>
-          </div>
-        </div>
-
-        <hr style={styles.divider} />
 
         <table className="bill-table" style={styles.table}>
           <thead>
@@ -1640,7 +1653,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    borderBottom: "1px dotted #cbd5e1",
     fontFamily: "'Montserrat', sans-serif",
   },
   customerBoxRow: {
