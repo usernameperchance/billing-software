@@ -36,6 +36,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleGetCost(gsapi, req, res);
       case "getCustomer":
         return await handleGetCustomer(gsapi, req, res);
+      case "searchCustomersByName":
+        return await handleSearchCustomersByName(gsapi, req, res);
+      case "searchCustomersById":
+        return await handleSearchCustomersById(gsapi, req, res);
       case "getDiscounts":
         return await handleGetDiscounts(gsapi, res);
       case "getPointsConfig":
@@ -173,11 +177,74 @@ async function handleGetCustomer(gsapi: any, req: VercelRequest, res: VercelResp
       customerId: matchedRow[0] || "",
       name: matchedRow[1] || "",
       phone: matchedRow[2] || "",
-      firstVisit: matchedRow[3] || "",
-      lastVisit: matchedRow[4] || "",
-      totalSpend: Number(matchedRow[5] || 0),
-      totalBills: Number(matchedRow[6] || 0),
-      points: Number(matchedRow[7] || 0),
+      phone2: matchedRow[3] || "",
+      points: Number(matchedRow[8] || 0),
+      totalSpend: Number(matchedRow[6] || 0),
+      totalBills: Number(matchedRow[7] || 0),
+    },
+  });
+}
+
+async function handleSearchCustomersByName(gsapi: any, req: VercelRequest, res: VercelResponse) {
+  const { name } = req.query;
+  if (!name || typeof name !== "string") {
+    return res.status(400).json({ error: "Missing name parameter" });
+  }
+
+  const response = await gsapi.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: "Customers!A2:I",
+  });
+
+  const rows = response.data.values || [];
+  const searchTerm = name.toLowerCase().trim();
+
+  // Simple fuzzy match - find all rows where name contains the search term
+  const matches = rows
+    .filter((r: any) => r[1]?.toString().toLowerCase().includes(searchTerm))
+    .map((r: any) => ({
+      customerId: r[0] || "",
+      name: r[1] || "",
+      phone: r[2] || "",
+      phone2: r[3] || "",
+      points: Number(r[8] || 0),
+      totalSpend: Number(r[6] || 0),
+      totalBills: Number(r[7] || 0),
+    }));
+
+  return res.status(200).json({ customers: matches });
+}
+
+async function handleSearchCustomersById(gsapi: any, req: VercelRequest, res: VercelResponse) {
+  const { customerId } = req.query;
+  if (!customerId || typeof customerId !== "string") {
+    return res.status(400).json({ error: "Missing customerId parameter" });
+  }
+
+  const response = await gsapi.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: "Customers!A2:I",
+  });
+
+  const rows = response.data.values || [];
+  const searchId = customerId.toUpperCase().trim();
+
+  // Find exact match by Customer ID
+  const matchedRow = rows.find((r: any) => r[0]?.toString().toUpperCase() === searchId);
+
+  if (!matchedRow) {
+    return res.status(200).json({ customer: null });
+  }
+
+  return res.status(200).json({
+    customer: {
+      customerId: matchedRow[0] || "",
+      name: matchedRow[1] || "",
+      phone: matchedRow[2] || "",
+      phone2: matchedRow[3] || "",
+      points: Number(matchedRow[8] || 0),
+      totalSpend: Number(matchedRow[6] || 0),
+      totalBills: Number(matchedRow[7] || 0),
     },
   });
 }

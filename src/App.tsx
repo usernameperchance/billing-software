@@ -14,7 +14,7 @@ type BillItem = {
 };
 
 type Slab = { minTotal: number; maxTotal: number; pct: number };
-type Customer = { customerId: string; name: string; phone: string; points: number; totalSpend: number; totalBills: number };
+type Customer = { customerId: string; name: string; phone: string; phone2?: string; points: number; totalSpend: number; totalBills: number };
 type PointsConfig = { earnRate: number; redeemRate: number; minRedeem: number };
 
 export default function App() {
@@ -35,7 +35,6 @@ export default function App() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [pointsConfig, setPointsConfig] = useState<PointsConfig | null>(null);
   const [redeemPoints, setRedeemPoints] = useState(false);
-  const [fetchingCustomer, setFetchingCustomer] = useState(false);
   const [restockLoading, setRestockLoading] = useState(false);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [barcode, setBarcode] = useState("");
@@ -56,6 +55,9 @@ export default function App() {
   const [editingShadeValue, setEditingShadeValue] = useState("");
   const [editShadeSuggestion, setEditShadeSuggestion] = useState<string | null>(null);
   const [validatingShade, setValidatingShade] = useState(false);
+  const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
 
   // Auto-save bill to localStorage
   useEffect(() => {
@@ -226,19 +228,60 @@ export default function App() {
       .catch(() => setNextBillNo(1));
   };
 
-  const lookupCustomer = async (ph: string) => {
-    if (ph.replace(/[^0-9]/g, "").length < 10) { setCustomer(null); return; }
-    setFetchingCustomer(true);
+  const searchCustomersByName = async (name: string) => {
+    if (name.trim().length < 2) {
+      setCustomerSearchResults([]);
+      setShowCustomerDropdown(false);
+      return;
+    }
+    setCustomerSearchLoading(true);
     try {
-      const res = await fetch(`/api/core?action=getCustomer&phone=${encodeURIComponent(ph.trim())}`);
+      const res = await fetch(`/api/core?action=searchCustomersByName&name=${encodeURIComponent(name.trim())}`);
       const data = await res.json();
-      setCustomer(data.customer || null);
-      if (data.customer?.name) {
+      setCustomerSearchResults(data.customers || []);
+      setShowCustomerDropdown(data.customers && data.customers.length > 0);
+    } catch {
+      setCustomerSearchResults([]);
+      setShowCustomerDropdown(false);
+    } finally {
+      setCustomerSearchLoading(false);
+    }
+  };
+
+  const searchCustomersById = async (customerId: string) => {
+    if (customerId.trim().length < 2) {
+      setCustomer(null);
+      return;
+    }
+    setCustomerSearchLoading(true);
+    try {
+      const res = await fetch(`/api/core?action=searchCustomersById&customerId=${encodeURIComponent(customerId.trim())}`);
+      const data = await res.json();
+      if (data.customer) {
+        setCustomer(data.customer);
         setCustomerName(data.customer.name);
+        setPhone(data.customer.phone);
+        setShowCustomerDropdown(false);
         showToast(`Customer found: ${data.customer.name}`, "success");
+      } else {
+        setCustomer(null);
+        showToast("Customer ID not found", "error");
       }
-    } catch { setCustomer(null); }
-    finally { setFetchingCustomer(false); }
+    } catch {
+      setCustomer(null);
+      showToast("Error searching customer", "error");
+    } finally {
+      setCustomerSearchLoading(false);
+    }
+  };
+
+  const selectCustomerFromSearch = (cust: Customer) => {
+    setCustomer(cust);
+    setCustomerName(cust.name);
+    setPhone(cust.phone);
+    setCustomerSearchResults([]);
+    setShowCustomerDropdown(false);
+    showToast(`Customer selected: ${cust.name}`, "success");
   };
 
   useEffect(() => { fetchNextBillNo(); }, []);
@@ -1039,7 +1082,7 @@ export default function App() {
         }
       `}</style>
 
-      {/* Toast Notification */}
+      {/* toast notifs */}
       {toast && (
         <div style={{
           position: "fixed",
@@ -1241,6 +1284,12 @@ export default function App() {
         }}>
           {/* LEFT: Customer Info */}
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+            {customer?.customerId && (
+              <div style={{ display: "flex", gap: "8px" }}>
+                <span style={styles.metaLabel}>ID:</span>
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>{customer.customerId}</span>
+              </div>
+            )}
             <div style={{ display: "flex", gap: "8px" }}>
               <span style={styles.metaLabel}>Customer:</span>
               <span style={{ fontSize: "13px", fontWeight: 600, color: "#1a1a1a" }}>{customerName || "Walk-in"}</span>
@@ -1252,7 +1301,7 @@ export default function App() {
           </div>
 
           {/* RIGHT: Bill Details */}
-          <div style={{ display: "flex", gap: "32px", alignItems: "flex-start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", alignItems: "flex-end" }}>
             <div style={{ textAlign: "right" }}>
               <div style={{ ...styles.metaLabel, textAlign: "right", display: "block", marginBottom: "4px" }}>Bill No</div>
               <div style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a" }}>#{nextBillNo ?? "—"}</div>
@@ -1429,29 +1478,75 @@ export default function App() {
 
       <div className="no-print" style={styles.customerCard}>
         <div style={styles.row}>
-          <input
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            placeholder="Customer Name..."
-            style={styles.smallInput}
-          />
+          <div style={{ position: "relative", flex: 1 }}>
+            <input
+              value={customerName}
+              onChange={(e) => {
+                setCustomerName(e.target.value);
+                searchCustomersByName(e.target.value);
+              }}
+              placeholder="Search Customer Name..."
+              style={styles.smallInput}
+            />
+            {showCustomerDropdown && customerSearchResults.length > 0 && (
+              <div style={{
+                position: "absolute",
+                top: "100%",
+                left: 0,
+                right: 0,
+                background: "#fff",
+                border: "1px solid #cbd5e1",
+                borderTop: "none",
+                borderRadius: "0 0 6px 6px",
+                maxHeight: "200px",
+                overflowY: "auto",
+                zIndex: 1000,
+                fontFamily: "'Montserrat', sans-serif",
+              }}>
+                {customerSearchResults.map((cust, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => selectCustomerFromSearch(cust)}
+                    style={{
+                      padding: "10px 12px",
+                      borderBottom: idx < customerSearchResults.length - 1 ? "1px solid #f0f0f0" : "none",
+                      cursor: "pointer",
+                      fontSize: "13px",
+                      transition: "background 0.2s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f8f9fb")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                  >
+                    <div style={{ fontWeight: 600, color: "#0f172a" }}>{cust.customerId} — {cust.name}</div>
+                    <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                      📞 {cust.phone}{cust.phone2 ? `, ${cust.phone2}` : ""} • {cust.points} pts
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <input
             value={phone}
-            onChange={(e) => {
-              setPhone(e.target.value);
-              lookupCustomer(e.target.value);
-            }}
-            placeholder="Phone (10 digits)... *"
-            style={{...styles.smallInput, borderColor: phone.trim().length > 0 && !isPhoneValid ? '#ef4444' : '#cbd5e1'}}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="Phone (optional)"
+            style={{...styles.smallInput, borderColor: phone.trim().length > 0 && !isPhoneValid && phone.replace(/[^0-9]/g, "").length >= 5 ? '#ef4444' : '#cbd5e1'}}
           />
-          {fetchingCustomer && <span style={{ fontSize: 13, color: "#888", fontFamily: "'Montserrat', sans-serif" }}>Looking up...</span>}
+          <input
+            value={customer?.customerId || ""}
+            onChange={(e) => {
+              if (e.target.value.trim()) {
+                searchCustomersById(e.target.value);
+              }
+            }}
+            placeholder="Or search by ID..."
+            style={styles.smallInput}
+          />
+          {customerSearchLoading && <span style={{ fontSize: 13, color: "#888", fontFamily: "'Montserrat', sans-serif" }}>🔍</span>}
         </div>
-        {!isPhoneValid && phone.trim().length > 0 && (
-          <div style={{ fontSize: 12, color: "#cc3333", marginTop: 4, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>⚠ Enter a valid 10-digit phone number</div>
-        )}
         {customer && (
           <div style={styles.customerInfo}>
-            <span>👤 {customer.name} — {customer.points} pts</span>
+            <span>👤 {customer.customerId} — {customer.name} — {customer.points} pts</span>
             {pointsConfig && customer.points >= pointsConfig.minRedeem && (
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
                 <input
@@ -1469,13 +1564,8 @@ export default function App() {
             )}
           </div>
         )}
-        {!customer && phone.replace(/[^0-9]/g, "").length >= 10 && !fetchingCustomer && (
+        {!customer && customerName.trim().length >= 2 && !customerSearchLoading && (
           <div style={{ fontSize: 13, color: "#888", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 500 }}>🆕 New customer — will be registered on save</div>
-        )}
-        {customer && !customerMatchesPhone && (
-          <div style={{ fontSize: 12, color: "#b56a00", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 600 }}>
-            ⏳ Customer lookup does not match the current phone number yet.
-          </div>
         )}
       </div>
 

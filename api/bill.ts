@@ -513,15 +513,18 @@ let customerId = "";
 try {
   const custRes = await gsapi.spreadsheets.values.get({
     spreadsheetId: STORE_SHEET_ID,
-    range: "Customers!A:H",
+    range: "Customers!A:I",
   });
   const custRows = custRes.data.values || [];
   const phoneRaw = customer.phone.toString().replace(/[^0-9]/g, "");
 
   let existingIndex = -1;
   for (let i = 0; i < custRows.length; i++) {
-    const rowPhoneRaw = (custRows[i][2]?.toString() || "").replace(/[^0-9]/g, "");
-    if (rowPhoneRaw === phoneRaw) {
+    const rowPhone1 = (custRows[i][2]?.toString() || "").replace(/[^0-9]/g, "");
+    const rowPhone2 = (custRows[i][3]?.toString() || "").replace(/[^0-9]/g, "");
+    
+    // Match either Phone 1 or Phone 2
+    if (rowPhone1 === phoneRaw || rowPhone2 === phoneRaw) {
       existingIndex = i;
       break;
     }
@@ -534,13 +537,14 @@ try {
     customerId = generateCustomerId(custRows.filter((row: any) => row[0]?.toString().startsWith("LMS-")));
     await gsapi.spreadsheets.values.append({
       spreadsheetId: STORE_SHEET_ID,
-      range: "Customers!A:H",
+      range: "Customers!A:I",
       valueInputOption: "USER_ENTERED",
       requestBody: {
         values: [[
           customerId,
           customer.name || "",
           phoneRaw,
+          "",  // Phone 2 (empty for new customers)
           date,
           date,
           finalTotal,
@@ -554,9 +558,9 @@ try {
     // Existing customer: update the same row (no append)
     customerId = custRows[existingIndex][0];
     const existing = custRows[existingIndex];
-    const currentSpend = Number(existing[5]) || 0;
-    const currentBills = Number(existing[6]) || 0;
-    const currentPoints = Number(existing[7]) || 0;
+    const currentSpend = Number(existing[6]) || 0;
+    const currentBills = Number(existing[7]) || 0;
+    const currentPoints = Number(existing[8]) || 0;
     const newPoints = pointsRedeemed > 0
       ? currentPoints - (redeemRate > 0 ? pointsRedeemed / redeemRate : 0)
       : currentPoints + pointsEarned;
@@ -573,20 +577,24 @@ try {
       });
     }
 
-    // Update phone if changed (normalized)
-    if (phoneRaw !== (existing[2]?.toString().replace(/[^0-9]/g, "") || "")) {
+    // Handle phone updates (Phone 1 and Phone 2)
+    const existingPhone1 = (existing[2]?.toString() || "").replace(/[^0-9]/g, "");
+    const existingPhone2 = (existing[3]?.toString() || "").replace(/[^0-9]/g, "");
+    
+    // If provided phone doesn't match Phone 1, update Phone 2
+    if (phoneRaw && phoneRaw !== existingPhone1 && phoneRaw !== existingPhone2) {
       await gsapi.spreadsheets.values.update({
         spreadsheetId: STORE_SHEET_ID,
-        range: `Customers!C${updateRow}`,
+        range: `Customers!D${updateRow}`,
         valueInputOption: "USER_ENTERED",
         requestBody: { values: [[phoneRaw]] },
       });
     }
 
-    // Update lastVisit (E), spend (F), bills (G), points (H)
+    // Update lastVisit (E), spend (G), bills (H), points (I)
     await gsapi.spreadsheets.values.update({
       spreadsheetId: STORE_SHEET_ID,
-      range: `Customers!E${updateRow}:H${updateRow}`,
+      range: `Customers!F${updateRow}:I${updateRow}`,
       valueInputOption: "USER_ENTERED",
       requestBody: {
         values: [[
