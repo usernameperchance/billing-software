@@ -677,11 +677,12 @@ export default function App() {
       setCost(0);
       setTimeout(() => barcodeInputRef.current?.focus(), 50);
     } else {
+      setItem("");
       setShade("");
       setQty(1);
       setPrice(0);
       setCost(0);
-      setTimeout(() => shadeRef.current?.focus(), 50);
+      setTimeout(() => itemRef.current?.focus(), 50);
     }
   };
 
@@ -1274,7 +1275,7 @@ export default function App() {
           borderRadius: "0px",
           padding: "16px 18px",
           marginBottom: "0px",
-          marginTop: "14px",
+          marginTop: "8px",
           backgroundColor: "#f8f9fb",
           display: "flex",
           justifyContent: "space-between",
@@ -1744,11 +1745,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: "18px",
     alignItems: "center",
   },
-  logo: { width: "300px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 14px auto" },
+  logo: { width: "300px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 10px auto" },
   metaLabel: { fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 800, minWidth: "52px", fontFamily: "'Montserrat', sans-serif" },
   metaValue: { fontSize: "15px", fontWeight: 700, color: "#0f172a", textAlign: "right", minWidth: "80px", fontFamily: "'Montserrat', sans-serif", letterSpacing: "-0.3px" },
-  divider: { border: "none", borderTop: "1px dotted #cbd5e1", margin: "14px 0", padding: "0" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "14px", border: "1px solid #c5cad1", borderTop: "none", borderBottom: "1px solid #c5cad1", fontFamily: "'Montserrat', sans-serif", userSelect: "none" },
+  divider: { border: "none", borderTop: "1px dotted #cbd5e1", margin: "10px 0", padding: "0" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "10px", border: "1px solid #c5cad1", borderTop: "none", borderBottom: "2px solid #0f172a", fontFamily: "'Montserrat', sans-serif", userSelect: "none" },
   theadRow: { backgroundColor: "#f0f1f3" },
   th: {
     padding: "10px 8px",
@@ -1812,9 +1813,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-end",
-    gap: "10px",
-    marginTop: "14px",
-    paddingTop: "14px",
+    gap: "8px",
+    marginTop: "10px",
+    paddingTop: "10px",
     borderTop: "1px dotted #cbd5e1",
   },
   profitRow: { display: "flex", gap: "64px", fontSize: "13px", color: "#64748b", justifyContent: "space-between", minWidth: "260px", fontFamily: "'Montserrat', sans-serif", fontWeight: 600 },
@@ -1826,8 +1827,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     color: "#0f172a",
     borderTop: "1px solid #cbd5e1",
-    paddingTop: "12px",
-    marginTop: "10px",
+    paddingTop: "10px",
+    marginTop: "8px",
     justifyContent: "space-between",
     minWidth: "260px",
     letterSpacing: "-0.3px",
@@ -1835,8 +1836,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   thankYou: { 
     textAlign: "center", 
-    marginTop: "22px", 
-    paddingTop: "18px",
+    marginTop: "16px", 
+    paddingTop: "12px",
     borderTop: "1px dotted #cbd5e1",
     fontSize: "11px", 
     color: "#475569", 

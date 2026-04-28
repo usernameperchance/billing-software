@@ -57,36 +57,6 @@ async function ensureBillSheetColumns(gsapi: any) {
     console.error("Bill sheet not found – cannot ensure columns");
     return;
   }
-  const currentCols = billSheet.properties?.gridProperties?.columnCount || 0;
-  if (currentCols < 11) {
-    await gsapi.spreadsheets.batchUpdate({
-      spreadsheetId: STORE_SHEET_ID,
-      requestBody: {
-        requests: [{
-          updateSheetProperties: {
-            properties: {
-              sheetId: billSheet.properties?.sheetId,
-              gridProperties: { columnCount: 11 }
-            },
-            fields: "gridProperties.columnCount"
-          }
-        }]
-      }
-    });
-    const headerRow = await gsapi.spreadsheets.values.get({
-      spreadsheetId: STORE_SHEET_ID,
-      range: "Bill!1:1",
-    });
-    const headers = headerRow.data.values?.[0] || [];
-    if (headers.length < 11 || headers[10] !== "Customer ID") {
-      await gsapi.spreadsheets.values.update({
-        spreadsheetId: STORE_SHEET_ID,
-        range: "Bill!K1",
-        valueInputOption: "USER_ENTERED",
-        requestBody: { values: [["Customer ID"]] }
-      });
-    }
-  }
 }
 
 async function logLoftFallback(
@@ -103,22 +73,6 @@ async function logLoftFallback(
       fields: "sheets.properties.title",
     });
     const sheetExists = (sheetMeta.data.sheets || []).some((s: any) => s.properties?.title === "Loft Fallback Log");
-    if (!sheetExists) {
-      await gsapi.spreadsheets.batchUpdate({
-        spreadsheetId: STORE_SHEET_ID,
-        requestBody: {
-          requests: [{ addSheet: { properties: { title: "Loft Fallback Log" } } }],
-        },
-      });
-      await gsapi.spreadsheets.values.update({
-        spreadsheetId: STORE_SHEET_ID,
-        range: "Loft Fallback Log!A1:F1",
-        valueInputOption: "USER_ENTERED",
-        requestBody: {
-          values: [["Timestamp", "Bill No", "Item", "Shade", "Qty from Loft", "Bill Date"]],
-        },
-      });
-    }
     await gsapi.spreadsheets.values.append({
       spreadsheetId: STORE_SHEET_ID,
       range: "Loft Fallback Log!A:F",
