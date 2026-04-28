@@ -1745,11 +1745,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: "18px",
     alignItems: "center",
   },
-  logo: { width: "300px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 10px auto" },
+  logo: { width: "300px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 4px auto" },
   metaLabel: { fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 800, minWidth: "52px", fontFamily: "'Montserrat', sans-serif" },
   metaValue: { fontSize: "15px", fontWeight: 700, color: "#0f172a", textAlign: "right", minWidth: "80px", fontFamily: "'Montserrat', sans-serif", letterSpacing: "-0.3px" },
   divider: { border: "none", borderTop: "1px dotted #cbd5e1", margin: "10px 0", padding: "0" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "10px", border: "1px solid #c5cad1", borderTop: "none", borderBottom: "2px solid #0f172a", fontFamily: "'Montserrat', sans-serif", userSelect: "none" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: "13px", marginTop: "10px", border: "1px solid #c5cad1", borderTop: "none", borderBottom: "1.5px solid #0f172a", fontFamily: "'Montserrat', sans-serif", userSelect: "none" },
   theadRow: { backgroundColor: "#f0f1f3" },
   th: {
     padding: "10px 8px",
