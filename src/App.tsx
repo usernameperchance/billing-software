@@ -58,6 +58,7 @@ export default function App() {
   const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [printPreview, setPrintPreview] = useState(false);
 
   // Auto-save bill to localStorage
   useEffect(() => {
@@ -1016,6 +1017,11 @@ export default function App() {
           transform: translateY(0);
         }
         
+        @page {
+          size: A4;
+          margin: 0.5cm;
+          page-break-after: avoid;
+        }
         @media print {
           .no-print { display: none !important; }
           .print-only { display: inline !important; }
@@ -1024,6 +1030,8 @@ export default function App() {
             padding: 0 !important; 
             background: white !important;
             font-family: 'Montserrat', Arial, sans-serif !important;
+            width: 210mm !important;
+            height: 297mm !important;
           }
           .app-container {
             background: white !important;
@@ -1032,14 +1040,19 @@ export default function App() {
             margin: 0 !important;
             padding: 0 !important;
             max-width: 100% !important;
+            width: 210mm !important;
           }
           #print-bill { 
             border: 1.5px solid #000 !important;
             box-shadow: none !important;
             border-radius: 0 !important;
             margin: 0 !important;
-            padding: 28px 32px !important;
+            padding: 16px 20px !important;
             page-break-inside: avoid !important;
+            page-break-after: avoid !important;
+            max-height: 297mm !important;
+            overflow: hidden !important;
+            width: 210mm !important;
           }
           .bill-table {
             page-break-inside: avoid !important;
@@ -1273,7 +1286,7 @@ export default function App() {
         <div style={{
           border: "1px solid #e2e8f0",
           borderRadius: "0px",
-          padding: "16px 18px",
+          padding: "12px 14px",
           marginBottom: "0px",
           marginTop: "0px",
           backgroundColor: "#f8f9fb",
@@ -1601,6 +1614,10 @@ export default function App() {
           📲 Send Bill
         </button>
 
+        <button style={styles.printBtn} onClick={() => setPrintPreview(true)}>
+          👁 Preview
+        </button>
+
         <button style={styles.printBtn} onClick={() => window.print()}>
           🖨 Print Bill
         </button>
@@ -1628,6 +1645,94 @@ export default function App() {
           {savingProgress ? "⏳ Saving..." : "💾📲 Save & Send"}
         </button>
       </div>
+
+      {/* Print Preview Modal */}
+      {printPreview && (
+        <div style={styles.previewOverlay} onClick={() => setPrintPreview(false)}>
+          <div style={styles.previewModal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.previewHeader}>
+              <h2 style={{ margin: "0", fontSize: "18px", fontWeight: 700 }}>Print Preview</h2>
+              <button
+                onClick={() => setPrintPreview(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "20px",
+                  cursor: "pointer",
+                  color: "#666",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={styles.previewContent}>
+              <div id="preview-bill" style={{ ...styles.billArea, maxHeight: "600px", overflow: "auto" }}>
+                <div style={styles.billHeader}>
+                  <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
+                </div>
+
+                <div style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "0px",
+                  padding: "12px 14px",
+                  marginBottom: "0px",
+                  marginTop: "0px",
+                  backgroundColor: "#f8f9fb",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: "24px",
+                  fontFamily: "'Montserrat', sans-serif",
+                }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1 }}>
+                    {customer?.customerId && (
+                      <div style={{ fontSize: "11px", color: "#0f172a", fontWeight: 700 }}>
+                        <span style={styles.metaLabel}>ID:</span> {customer.customerId}
+                      </div>
+                    )}
+                    <div style={{ fontSize: "11px", color: "#1a1a1a", fontWeight: 600 }}>
+                      <span style={styles.metaLabel}>Customer:</span> {customerName || "Walk-in"}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#1a1a1a", fontWeight: 600 }}>
+                      <span style={styles.metaLabel}>Phone:</span> {phone || "—"}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "flex-start" }}>
+                    <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
+                      <span style={styles.metaLabel}>Bill No:</span> #{nextBillNo ?? "—"}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
+                      <span style={styles.metaLabel}>Date:</span> {billDate}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
+                      <span style={styles.metaLabel}>Time:</span> {billTime}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: "9px", color: "#999", textAlign: "center", marginTop: "6px" }}>
+                  A4 Page Preview (210mm × 297mm)
+                </div>
+              </div>
+            </div>
+            <div style={styles.previewFooter}>
+              <button
+                style={{ ...styles.button, marginRight: "10px" }}
+                onClick={() => window.print()}
+              >
+                🖨 Print
+              </button>
+              <button
+                style={styles.button}
+                onClick={() => setPrintPreview(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1777,17 +1882,17 @@ const styles: { [key: string]: React.CSSProperties } = {
   table: { 
     width: "100%", 
     borderCollapse: "collapse", 
-    fontSize: "13px", marginTop: "10px", 
+    fontSize: "12px", marginTop: "10px", 
     border: "1px solid #0f172a", 
     fontFamily: "'Montserrat', sans-serif", 
     userSelect: "none" 
   },
   theadRow: { backgroundColor: "#f0f1f3" },
   th: {
-    padding: "10px 8px",
+    padding: "6px 4px",
     color: "#334155",
     fontWeight: 800,
-    fontSize: "10px",
+    fontSize: "9px",
     textTransform: "uppercase",
     letterSpacing: "0.8px",
     textAlign: "left",
@@ -1796,9 +1901,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     userSelect: "none",
   },
   td: {
-    padding: "8px 8px",
+    padding: "4px 4px",
     color: "#1e293b",
-    fontSize: "13px",
+    fontSize: "12px",
     borderBottom: "1px solid #e0e3e8",
     borderRight: "1px solid #e0e3e8",
     verticalAlign: "middle",
@@ -1845,9 +1950,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-end",
-    gap: "8px",
-    marginTop: "10px",
-    paddingTop: "10px",
+    gap: "6px",
+    marginTop: "8px",
+    paddingTop: "8px",
     borderTop: "1px dotted #cbd5e1",
   },
   profitRow: { display: "flex", gap: "64px", fontSize: "13px", color: "#64748b", justifyContent: "space-between", minWidth: "260px", fontFamily: "'Montserrat', sans-serif", fontWeight: 600 },
@@ -1910,5 +2015,48 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontFamily: "'Montserrat', sans-serif",
     letterSpacing: "0.3px",
     textTransform: "uppercase",
+  },
+  previewOverlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+  },
+  previewModal: {
+    backgroundColor: "#fff",
+    borderRadius: "8px",
+    boxShadow: "0 10px 40px rgba(0, 0, 0, 0.2)",
+    width: "90%",
+    maxWidth: "600px",
+    maxHeight: "90vh",
+    display: "flex",
+    flexDirection: "column",
+    fontFamily: "'Montserrat', sans-serif",
+  },
+  previewHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "16px 20px",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  previewContent: {
+    flex: 1,
+    overflow: "auto",
+    padding: "20px",
+    backgroundColor: "#f8f9fb",
+  },
+  previewFooter: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "10px",
+    padding: "16px 20px",
+    borderTop: "1px solid #e2e8f0",
   },
 };
