@@ -62,6 +62,7 @@ export default function App() {
   const [courierCharges, setCourierCharges] = useState(0);
   const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [showShadeDropdown, setShowShadeDropdown] = useState(false);
+  const [shadeDropdownIndex, setShadeDropdownIndex] = useState(-1);
 
   // Auto-save bill to localStorage
   useEffect(() => {
@@ -618,7 +619,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode, isPhoneValid, saving]);
+  }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode, isPhoneValid, saving, shadeDropdownIndex]);
 
   const addItem = async (fromBarcode = false) => {
     if (price === undefined || price === null || price < 0) {
@@ -686,6 +687,8 @@ export default function App() {
       setQty(1);
       setPrice(0);
       setCost(0);
+      setShowItemDropdown(false);
+      setShowShadeDropdown(false);
       setTimeout(() => barcodeInputRef.current?.focus(), 50);
     } else {
       setItem("");
@@ -1318,11 +1321,28 @@ export default function App() {
                   onChange={(e) => {
                     setShade(e.target.value);
                     setShowShadeDropdown(true);
+                    setShadeDropdownIndex(-1);
                   }}
                   onFocus={() => setShowShadeDropdown(true)}
                   onKeyDown={(e) => {
                     if (e.key === "Tab") {
                       setShowShadeDropdown(false);
+                      setShadeDropdownIndex(-1);
+                    } else if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      const filtered = shades.filter((s) => shade.trim() === "" || s.toLowerCase().includes(shade.toLowerCase())).slice(0, 8);
+                      setShadeDropdownIndex((prev) => (prev < filtered.length - 1 ? prev + 1 : prev));
+                    } else if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setShadeDropdownIndex((prev) => (prev > 0 ? prev - 1 : -1));
+                    } else if (e.key === "Enter") {
+                      e.preventDefault();
+                      const filtered = shades.filter((s) => shade.trim() === "" || s.toLowerCase().includes(shade.toLowerCase())).slice(0, 8);
+                      if (shadeDropdownIndex >= 0 && shadeDropdownIndex < filtered.length) {
+                        setShade(filtered[shadeDropdownIndex]);
+                        setShowShadeDropdown(false);
+                        setShadeDropdownIndex(-1);
+                      }
                     }
                   }}
                   placeholder="Shade/Variant..."
@@ -1357,13 +1377,20 @@ export default function App() {
                   {shades
                     .filter((s) => shade.trim() === "" || s.toLowerCase().includes(shade.toLowerCase()))
                     .slice(0, 8)
-                    .map((shadeVal) => (
+                    .map((shadeVal, idx) => (
                       <div
                         key={shadeVal}
+                        role="option"
+                        aria-selected={shadeDropdownIndex === idx}
                         style={{
                           padding: "8px 12px",
                           cursor: "pointer",
-                          backgroundColor: shade.toLowerCase() === shadeVal.toLowerCase() ? "#f0f4f8" : "#fff",
+                          backgroundColor:
+                            shadeDropdownIndex === idx
+                              ? "#cbd5e1"
+                              : shade.toLowerCase() === shadeVal.toLowerCase()
+                              ? "#f0f4f8"
+                              : "#fff",
                           borderBottom: "1px solid #f0f0f0",
                           fontSize: "13px",
                           fontFamily: "'Montserrat', sans-serif",
@@ -1372,12 +1399,13 @@ export default function App() {
                         onClick={() => {
                           setShade(shadeVal);
                           setShowShadeDropdown(false);
+                          setShadeDropdownIndex(-1);
                         }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = "#f0f4f8";
+                        onMouseEnter={() => {
+                          setShadeDropdownIndex(idx);
                         }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = shade.toLowerCase() === shadeVal.toLowerCase() ? "#f0f4f8" : "#fff";
+                        onMouseLeave={() => {
+                          setShadeDropdownIndex(-1);
                         }}
                       >
                         {shadeVal}
