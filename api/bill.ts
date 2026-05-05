@@ -366,6 +366,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         discountAmt = 0,
         discountPct = 0,
         finalTotal = 0,
+        courierCharges = 0,
         pointsRedeemed = 0,
         customer,
         earnRate = 0,
@@ -598,17 +599,31 @@ try {
       const effectiveDiscount = pointsRedeemed > 0 ? pointsRedeemed : discountAmt;
       if (effectiveDiscount > 0) {
         const label = pointsRedeemed > 0 ? "Points Redeemed" : "Discount";
-        const detail = pointsRedeemed > 0
-          ? `${redeemRate > 0 ? pointsRedeemed / redeemRate : 0} pts`
-          : `${discountPct}%`;
+        const valuesToAppend = [
+          [billNo, label, "", "", "", "", date, time, "", "", "", customerId],
+        ];
+        if (courierCharges > 0) {
+          valuesToAppend.push([billNo, "Courier Charges", "", "", "", "", date, time, "", courierCharges, "", customerId]);
+        }
+        valuesToAppend.push([billNo, "Final Total", "", "", "", "", date, time, "", "", finalTotal ?? "", customerId]);
+        
         await gsapi.spreadsheets.values.append({
           spreadsheetId: STORE_SHEET_ID,
-          range: "Bill!A:K",
+          range: "Bill!A:L",
+          valueInputOption: "USER_ENTERED",
+          requestBody: {
+            values: valuesToAppend,
+          },
+        });
+      } else if (courierCharges > 0) {
+        await gsapi.spreadsheets.values.append({
+          spreadsheetId: STORE_SHEET_ID,
+          range: "Bill!A:L",
           valueInputOption: "USER_ENTERED",
           requestBody: {
             values: [
-              [billNo, "", "", "", label, `-₹${effectiveDiscount}`, date, time, "", detail, customerId],
-              [billNo, "", "", "", "Final Total", finalTotal ?? "", date, time, "", "", customerId],
+              [billNo, "Courier Charges", "", "", "", "", date, time, "", courierCharges, "", customerId],
+              [billNo, "Final Total", "", "", "", "", date, time, "", "", finalTotal ?? "", customerId],
             ],
           },
         });

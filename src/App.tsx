@@ -59,14 +59,15 @@ export default function App() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [printPreview, setPrintPreview] = useState(false);
+  const [courierCharges, setCourierCharges] = useState(0);
 
   // Auto-save bill to localStorage
   useEffect(() => {
     if (items.length > 0) {
-      const draftBill = { items, customerName, phone, redeemPoints };
+      const draftBill = { items, customerName, phone, redeemPoints, courierCharges };
       localStorage.setItem("billDraft", JSON.stringify(draftBill));
     }
-  }, [items, customerName, phone, redeemPoints]);
+  }, [items, customerName, phone, redeemPoints, courierCharges]);
 
   // Show toast for a few seconds
   useEffect(() => {
@@ -81,7 +82,7 @@ export default function App() {
     const draft = localStorage.getItem("billDraft");
     if (draft) {
       try {
-        const { items: draftItems, customerName: draftName, phone: draftPhone, redeemPoints: draftRedeem } = JSON.parse(draft);
+        const { items: draftItems, customerName: draftName, phone: draftPhone, redeemPoints: draftRedeem, courierCharges: draftCourier } = JSON.parse(draft);
         if (draftItems?.length > 0) {
           const shouldRecover = window.confirm("You have an unsaved bill. Would you like to recover it?");
           if (shouldRecover) {
@@ -89,6 +90,7 @@ export default function App() {
             setCustomerName(draftName || "");
             setPhone(draftPhone || "");
             setRedeemPoints(draftRedeem || false);
+            setCourierCharges(draftCourier || 0);
             setToast({ message: "Bill recovered from draft", type: "success" });
           } else {
             localStorage.removeItem("billDraft");
@@ -704,7 +706,7 @@ export default function App() {
 
   const discountAmt = pointsDiscount > 0 ? pointsDiscount : slabDiscount;
   const discountPct = pointsDiscount > 0 ? 0 : (applicableSlab?.pct ?? 0);
-  const finalTotal = grandTotal - discountAmt;
+  const finalTotal = grandTotal - discountAmt + courierCharges;
 
   const captureBillImage = async (): Promise<Blob | null> => {
     const billEl = document.getElementById("print-bill");
@@ -786,6 +788,7 @@ export default function App() {
         body: JSON.stringify({
           items,
           discountAmt,
+          courierCharges,
           discountPct,
           finalTotal,
           pointsRedeemed: pointsDiscount,
@@ -821,6 +824,7 @@ export default function App() {
       setCustomerName("");
       setPhone("");
       setRedeemPoints(false);
+      setCourierCharges(0);
 
       showToast(`Bill #${nextBillNo} saved successfully!`, "success");
       return true;
@@ -1475,6 +1479,12 @@ export default function App() {
               <span>− ₹{discountAmt}</span>
             </div>
           )}
+          {courierCharges > 0 && (
+            <div style={{ ...styles.discountRow, display: "flex", justifyContent: "space-between", paddingRight: "8px", color: "#dc2626" }}>
+              <span>Courier Charges</span>
+              <span>+ ₹{courierCharges}</span>
+            </div>
+          )}
           <div style={{ ...styles.grandTotalRow, display: "flex", justifyContent: "space-between" }}>
             <span>Grand Total</span>
             <span>₹{finalTotal}</span>
@@ -1570,6 +1580,24 @@ export default function App() {
                 {pointsConfig.minRedeem - customer.points} More points needed to redeem.
               </span>
             )}
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, minWidth: "120px" }}>🚚 Courier Charges:</span>
+              <input
+                type="number"
+                min="0"
+                value={courierCharges}
+                onChange={(e) => setCourierCharges(Number(e.target.value) || 0)}
+                placeholder="0"
+                style={{
+                  width: "80px",
+                  padding: "6px 8px",
+                  fontSize: "12px",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "0px",
+                  outline: "none",
+                }}
+              />
+            </label>
           </div>
         )}
         {!customer && customerName.trim().length >= 2 && !customerSearchLoading && (
