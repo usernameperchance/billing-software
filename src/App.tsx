@@ -60,6 +60,8 @@ export default function App() {
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [printPreview, setPrintPreview] = useState(false);
   const [courierCharges, setCourierCharges] = useState(0);
+  const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const [showShadeDropdown, setShowShadeDropdown] = useState(false);
 
   // Auto-save bill to localStorage
   useEffect(() => {
@@ -456,6 +458,12 @@ export default function App() {
     setShade(val);
     setTimeout(() => qtyRef.current?.focus(), 50);
   };
+
+  const itemsWithDropdown = ["eyes", "nose", "knitpro needles", "needles", "crochet hooks", "tulip hooks", "beads", "flower stick", "wooden rings"];
+  const needsShadeDropdown = itemsWithDropdown.some(i => i.toLowerCase() === item.toLowerCase());
+  const filteredItems = item.trim()
+    ? itemFuse.search(item).map(r => r.item).slice(0, 8)
+    : allItems.slice(0, 8);
 
   const handleBarcodeScan = async () => {
     const code = barcode.trim();
@@ -1234,7 +1242,11 @@ export default function App() {
             <input
               ref={itemRef}
               value={item}
-              onChange={(e) => setItem(e.target.value)}
+              onChange={(e) => {
+                setItem(e.target.value);
+                setShowItemDropdown(true);
+              }}
+              onFocus={() => setShowItemDropdown(true)}
               placeholder="Item..."
               style={styles.smallInput}
               autoFocus
@@ -1243,23 +1255,114 @@ export default function App() {
             {itemSuggestion && item !== itemSuggestion && (
               <span style={styles.suggestion}>{itemSuggestion}</span>
             )}
+        {showItemDropdown && filteredItems.length > 0 && (
+          <div style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            marginTop: "2px",
+            backgroundColor: "#fff",
+            border: "1px solid #cbd5e1",
+            borderRadius: "4px",
+            maxHeight: "200px",
+            overflowY: "auto",
+            zIndex: 10,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          }}>
+            {filteredItems.map((itemName) => (
+              <div
+                key={itemName}
+                style={{
+                  padding: "8px 12px",
+                  cursor: "pointer",
+                  backgroundColor: item.toLowerCase() === itemName.toLowerCase() ? "#f0f4f8" : "#fff",
+                  borderBottom: "1px solid #f0f0f0",
+                  fontSize: "13px",
+                  fontFamily: "'Montserrat', sans-serif",
+                  transition: "background-color 0.2s",
+                }}
+                onClick={() => {
+                  setItem(itemName);
+                  setShowItemDropdown(false);
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#f0f4f8";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = item.toLowerCase() === itemName.toLowerCase() ? "#f0f4f8" : "#fff";
+                }}
+              >
+                {itemName}
+              </div>
+            ))}
+          </div>
+        )}
+
             {item && !allItems.some(i => i.toLowerCase() === item.toLowerCase()) && (
               <span style={{ fontSize: 11, color: "#e67e22", marginLeft: 8 }}>(New item – no stock deduction)</span>
             )}
           </div>
 
-          {!isStandard && (
-            <div style={styles.autofillWrapper}>
+          {needsShadeDropdown && (
+            <div style={{ ...styles.autofillWrapper, position: "relative" }}>
               <input
                 ref={shadeRef}
                 value={shade}
-                onChange={(e) => setShade(e.target.value)}
+                onChange={(e) => {
+                  setShade(e.target.value);
+                  setShowShadeDropdown(true);
+                }}
+                onFocus={() => setShowShadeDropdown(true)}
                 placeholder="Shade/Variant..."
                 style={styles.smallInput}
                 autoComplete="off"
               />
-              {shadeSuggestion && shade !== shadeSuggestion && (
-                <span style={styles.suggestion}>{shadeSuggestion}</span>
+              {showShadeDropdown && shades.length > 0 && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  marginTop: "2px",
+                  backgroundColor: "#fff",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "4px",
+                  maxHeight: "200px",
+                  overflowY: "auto",
+                  zIndex: 10,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                }}>
+                  {shades
+                    .filter((s) => shade.trim() === "" || s.toLowerCase().includes(shade.toLowerCase()))
+                    .slice(0, 8)
+                    .map((shadeVal) => (
+                      <div
+                        key={shadeVal}
+                        style={{
+                          padding: "8px 12px",
+                          cursor: "pointer",
+                          backgroundColor: shade.toLowerCase() === shadeVal.toLowerCase() ? "#f0f4f8" : "#fff",
+                          borderBottom: "1px solid #f0f0f0",
+                          fontSize: "13px",
+                          fontFamily: "'Montserrat', sans-serif",
+                          transition: "background-color 0.2s",
+                        }}
+                        onClick={() => {
+                          setShade(shadeVal);
+                          setShowShadeDropdown(false);
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = "#f0f4f8";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = shade.toLowerCase() === shadeVal.toLowerCase() ? "#f0f4f8" : "#fff";
+                        }}
+                      >
+                        {shadeVal}
+                      </div>
+                    ))}
+                </div>
               )}
             </div>
           )}
@@ -1585,26 +1688,26 @@ export default function App() {
                 {pointsConfig.minRedeem - customer.points} More points needed to redeem.
               </span>
             )}
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
-              <span style={{ fontSize: "12px", fontWeight: 600, minWidth: "120px" }}>🚚 Courier Charges:</span>
-              <input
-                type="number"
-                min="0"
-                value={courierCharges}
-                onChange={(e) => setCourierCharges(Number(e.target.value) || 0)}
-                placeholder="0"
-                style={{
-                  width: "80px",
-                  padding: "6px 8px",
-                  fontSize: "12px",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "0px",
-                  outline: "none",
-                }}
-              />
-            </label>
           </div>
         )}
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
+          <span style={{ fontSize: "12px", fontWeight: 600, minWidth: "120px" }}>🚚 Courier Charges:</span>
+          <input
+            type="number"
+            min="0"
+            value={courierCharges}
+            onChange={(e) => setCourierCharges(Number(e.target.value) || 0)}
+            placeholder="0"
+            style={{
+              width: "80px",
+              padding: "6px 8px",
+              fontSize: "12px",
+              border: "1px solid #cbd5e1",
+              borderRadius: "0px",
+              outline: "none",
+            }}
+          />
+        </label>
         {!customer && customerName.trim().length >= 2 && !customerSearchLoading && (
           <div style={{ fontSize: 13, color: "#888", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 500 }}>🆕 New customer — will be registered on save</div>
         )}
