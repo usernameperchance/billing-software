@@ -459,8 +459,8 @@ export default function App() {
     setTimeout(() => qtyRef.current?.focus(), 50);
   };
 
-  const itemsWithDropdown = ["eyes", "nose", "knitpro needles", "needles", "crochet hooks", "tulip hooks", "beads", "flower stick", "wooden rings"];
-  const needsShadeDropdown = itemsWithDropdown.some(i => i.toLowerCase() === item.toLowerCase());
+  // Dynamically check if item has multiple shades (dropdown only if multiple options)
+  const needsShadeDropdown = shades.length > 1;
   const filteredItems = item.trim()
     ? itemFuse.search(item).map(r => r.item).slice(0, 8)
     : allItems.slice(0, 8);
@@ -1247,6 +1247,11 @@ export default function App() {
                 setShowItemDropdown(true);
               }}
               onFocus={() => setShowItemDropdown(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Tab") {
+                  setShowItemDropdown(false);
+                }
+              }}
               placeholder="Item..."
               style={styles.smallInput}
               autoFocus
@@ -1304,21 +1309,37 @@ export default function App() {
             )}
           </div>
 
-          {needsShadeDropdown && (
+          {!isStandard && (
             <div style={{ ...styles.autofillWrapper, position: "relative" }}>
-              <input
-                ref={shadeRef}
-                value={shade}
-                onChange={(e) => {
-                  setShade(e.target.value);
-                  setShowShadeDropdown(true);
-                }}
-                onFocus={() => setShowShadeDropdown(true)}
-                placeholder="Shade/Variant..."
-                style={styles.smallInput}
-                autoComplete="off"
-              />
-              {showShadeDropdown && shades.length > 0 && (
+              {needsShadeDropdown ? (
+                <input
+                  ref={shadeRef}
+                  value={shade}
+                  onChange={(e) => {
+                    setShade(e.target.value);
+                    setShowShadeDropdown(true);
+                  }}
+                  onFocus={() => setShowShadeDropdown(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab") {
+                      setShowShadeDropdown(false);
+                    }
+                  }}
+                  placeholder="Shade/Variant..."
+                  style={styles.smallInput}
+                  autoComplete="off"
+                />
+              ) : (
+                <input
+                  ref={shadeRef}
+                  value={shade}
+                  onChange={(e) => setShade(e.target.value)}
+                  placeholder="Shade/Variant..."
+                  style={styles.smallInput}
+                  autoComplete="off"
+                />
+              )}
+              {needsShadeDropdown && showShadeDropdown && shades.length > 0 && (
                 <div style={{
                   position: "absolute",
                   top: "100%",
@@ -1363,6 +1384,9 @@ export default function App() {
                       </div>
                     ))}
                 </div>
+              )}
+              {!needsShadeDropdown && shadeSuggestion && shade !== shadeSuggestion && (
+                <span style={styles.suggestion}>{shadeSuggestion}</span>
               )}
             </div>
           )}
@@ -1690,8 +1714,8 @@ export default function App() {
             )}
           </div>
         )}
-        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: "'Montserrat', sans-serif" }}>
-          <span style={{ fontSize: "12px", fontWeight: 600, minWidth: "120px" }}>🚚 Courier Charges:</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Montserrat', sans-serif", marginTop: "8px" }}>
+          <span style={{ fontSize: "13px", fontWeight: 600, minWidth: "120px" }}>🚚 Courier Charges:</span>
           <input
             type="number"
             min="0"
@@ -1699,15 +1723,17 @@ export default function App() {
             onChange={(e) => setCourierCharges(Number(e.target.value) || 0)}
             placeholder="0"
             style={{
-              width: "80px",
-              padding: "6px 8px",
-              fontSize: "12px",
+              width: "100px",
+              padding: "8px 10px",
+              fontSize: "13px",
               border: "1px solid #cbd5e1",
               borderRadius: "0px",
               outline: "none",
+              fontFamily: "'Montserrat', sans-serif",
+              boxSizing: "border-box",
             }}
           />
-        </label>
+        </div>
         {!customer && customerName.trim().length >= 2 && !customerSearchLoading && (
           <div style={{ fontSize: 13, color: "#888", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 500 }}>🆕 New customer — will be registered on save</div>
         )}
