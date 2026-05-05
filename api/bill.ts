@@ -275,9 +275,41 @@ async function deductAllItemsStock(
   const appliedOperations = new Map<string, any>(); // For rollback tracking
 
   for (const op of operations) {
-    const { item, shade, storeRowIndex, storeStock, loftRowIndex, loftIndividuals, loftPackets, packetSize, qty, timestamp } = op;
+    const { item, shade, storeRowIndex, loftRowIndex, packetSize, qty, timestamp } = op;
+    let storeStock = op.storeStock;
+    let loftIndividuals = op.loftIndividuals;
+    let loftPackets = op.loftPackets;
 
     try {
+      // RE-READ STORE STOCK JUST BEFORE DEDUCTING (pessimistic lock)
+      if (storeRowIndex !== -1) {
+        const storeRes = await gsapi.spreadsheets.values.get({
+          spreadsheetId: STORE_SHEET_ID,
+          range: `${escapeSheetName(item)}!C${storeRowIndex + 2}`,
+        });
+        const freshStoreStock = Number(storeRes.data.values?.[0]?.[0]) || 0;
+        if (freshStoreStock !== storeStock) {
+          console.warn(`Stock for ${item}/${shade} changed from ${storeStock} to ${freshStoreStock} between validation and deduction`);
+          storeStock = freshStoreStock; // Use the latest value
+        }
+      }
+
+      // RE-READ LOFT STOCK JUST BEFORE DEDUCTING
+      if (loftRowIndex !== -1) {
+        const loftRes = await gsapi.spreadsheets.values.get({
+          spreadsheetId: LOFT_SHEET_ID,
+          range: `${escapeSheetName(item)}!E${loftRowIndex + 2}:F${loftRowIndex + 2}`,
+        });
+        const freshIndividuals = Number(loftRes.data.values?.[0]?.[0]) || 0;
+        const freshPackets = Number(loftRes.data.values?.[0]?.[1]) || 0;
+        if (freshIndividuals !== loftIndividuals || freshPackets !== loftPackets) {
+          console.warn(`Loft stock for ${item}/${shade} changed between validation and deduction`);
+          loftIndividuals = freshIndividuals;
+          loftPackets = freshPackets;
+        }
+      }
+
+      // Now proceed with deduction using CURRENT stock values
       let remaining = qty;
       let usedFromStore = 0;
       let usedFromLoft = 0;
@@ -501,7 +533,8 @@ try {
     }
   }
 
-  const pointsEarned = pointsRedeemed > 0 ? 0 : Math.floor((finalTotal / 100) * earnRate);
+  // Always earn points on the final total, regardless of redemption
+  const pointsEarned = Math.floor((finalTotal / 100) * earnRate);
 
   if (existingIndex === -1) {
     // New customer: append to bottom
@@ -532,9 +565,9 @@ try {
     const currentSpend = Number(existing[6]) || 0;
     const currentBills = Number(existing[7]) || 0;
     const currentPoints = Number(existing[8]) || 0;
-    const newPoints = pointsRedeemed > 0
-      ? currentPoints - (redeemRate > 0 ? pointsRedeemed / redeemRate : 0)
-      : currentPoints + pointsEarned;
+    // Deduct redeemed points AND add newly earned points
+    const pointsRedeemedAmount = pointsRedeemed > 0 ? (redeemRate > 0 ? pointsRedeemed / redeemRate : 0) : 0;
+    const newPoints = currentPoints - pointsRedeemedAmount + pointsEarned;
 
     const updateRow = existingIndex + 1; // +1 because custRows[0] is header (row 1), so custRows[i] is row (i+1)
 
@@ -548,18 +581,34 @@ try {
       });
     }
 
-    // Handle phone updates (Phone 1 and Phone 2)
+    // Handle phone updates (Phone 1 and Phone 2) - with duplicate prevention
     const existingPhone1 = (existing[2]?.toString() || "").replace(/[^0-9]/g, "");
     const existingPhone2 = (existing[3]?.toString() || "").replace(/[^0-9]/g, "");
     
-    // If provided phone doesn't match Phone 1, update Phone 2
+    // Before adding as Phone 2, check if it's already used by another customer
     if (phoneRaw && phoneRaw !== existingPhone1 && phoneRaw !== existingPhone2) {
-      await gsapi.spreadsheets.values.update({
-        spreadsheetId: STORE_SHEET_ID,
-        range: `Customers!D${updateRow}`,
-        valueInputOption: "USER_ENTERED",
-        requestBody: { values: [[phoneRaw]] },
-      });
+      // Check if this phone is already used by ANY other customer
+      let phoneUsedByAnother = false;
+      for (let i = 0; i < custRows.length; i++) {
+        if (i === existingIndex) continue; // Skip current customer
+        const otherPhone1 = (custRows[i][2]?.toString() || "").replace(/[^0-9]/g, "");
+        const otherPhone2 = (custRows[i][3]?.toString() || "").replace(/[^0-9]/g, "");
+        if (phoneRaw === otherPhone1 || phoneRaw === otherPhone2) {
+          phoneUsedByAnother = true;
+          console.warn(`Phone ${phoneRaw} is already linked to customer ${custRows[i][0]}. Not adding as second phone.`);
+          break;
+        }
+      }
+      
+      // Only add as Phone 2 if not already used by another customer
+      if (!phoneUsedByAnother) {
+        await gsapi.spreadsheets.values.update({
+          spreadsheetId: STORE_SHEET_ID,
+          range: `Customers!D${updateRow}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[phoneRaw]] },
+        });
+      }
     }
 
     // Update lastVisit (F), spend (G), bills (H), points (I)
@@ -590,7 +639,7 @@ try {
   customerId = `TEMP-${customer.phone.replace(/[^0-9]/g, "")}`;
 }
 
-      // Write bill rows (A:K)
+      // Write bill rows (A:L) with cost field included for profit verification
       const billValues = items.map((entry: any) => [
         billNo,
         entry.item,
@@ -601,13 +650,14 @@ try {
         date,
         time,
         entry.profit,
+        entry.cost,        // NEW: Cost field for inventory valuation and profit verification
         finalTotal,
         customerId,
       ]);
 
       await gsapi.spreadsheets.values.append({
         spreadsheetId: STORE_SHEET_ID,
-        range: "Bill!A:K",
+        range: "Bill!A:L",
         valueInputOption: "USER_ENTERED",
         requestBody: { values: billValues },
       });

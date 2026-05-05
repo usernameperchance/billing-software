@@ -64,7 +64,34 @@ export default function App() {
   const [showShadeDropdown, setShowShadeDropdown] = useState(false);
   const [shadeDropdownIndex, setShadeDropdownIndex] = useState(-1);
 
-  // Auto-save bill to localStorage
+  // Validate recovered bill prices against current prices
+  const validateRecoveredPrices = async (recoveredItems: any[]) => {
+    const changes: string[] = [];
+    const validatedItems = await Promise.all(
+      recoveredItems.map(async (item) => {
+        if (!item.misc && allItems.includes(item.item)) {
+          try {
+            const priceRes = await fetch(
+              `/api/core?action=getPrice&item=${encodeURIComponent(item.item)}&shade=${encodeURIComponent(item.shade)}`
+            );
+            const priceData = await priceRes.json();
+            const currentPrice = priceData.price || item.price;
+            
+            if (currentPrice !== item.price) {
+              changes.push(`${item.item}: ₹${item.price} → ₹${currentPrice}`);
+              return { ...item, price: currentPrice, total: item.qty * currentPrice };
+            }
+          } catch (err) {
+            console.error(`Failed to validate price for ${item.item}`, err);
+          }
+        }
+        return item;
+      })
+    );
+    return { items: validatedItems, isValid: changes.length === 0, changes };
+  };
+
+  // auto-save bill to localStorage
   useEffect(() => {
     if (items.length > 0) {
       const draftBill = { items, customerName, phone, redeemPoints, courierCharges };
@@ -87,9 +114,18 @@ export default function App() {
       try {
         const { items: draftItems, customerName: draftName, phone: draftPhone, redeemPoints: draftRedeem, courierCharges: draftCourier } = JSON.parse(draft);
         if (draftItems?.length > 0) {
-          const shouldRecover = window.confirm("You have an unsaved bill. Would you like to recover it?");
+          const shouldRecover = window.confirm("You have an unsaved bill. Would you like to recover it?\n\nWarning: Prices may have changed. They will be validated when you save.");
           if (shouldRecover) {
-            setItems(draftItems);
+            // Validate recovered prices against current prices
+            validateRecoveredPrices(draftItems).then((validationResult) => {
+              if (!validationResult.isValid) {
+                setToast({
+                  message: `⚠️ Price change detected: ${validationResult.changes.join(", ")}. Prices updated.`,
+                  type: "info",
+                });
+              }
+              setItems(validationResult.items);
+            });
             setCustomerName(draftName || "");
             setPhone(draftPhone || "");
             setRedeemPoints(draftRedeem || false);
@@ -622,12 +658,25 @@ export default function App() {
   }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode, isPhoneValid, saving, shadeDropdownIndex]);
 
   const addItem = async (fromBarcode = false) => {
+    // Pre-flight validation
+    if (!item || !item.trim()) {
+      alert("Please enter an item name");
+      return;
+    }
+    if (qty <= 0) {
+      alert("Quantity must be greater than 0");
+      return;
+    }
     if (price === undefined || price === null || price < 0) {
       alert("Please enter a valid price (0 or higher)");
       return;
     }
-    if (!item) {
-      alert("Please enter an item name");
+    if (price === 0) {
+      alert("Price cannot be 0. Enter the correct price or mark as 'Misc' if complimentary.");
+      return;
+    }
+    if (cost === undefined || cost === null || cost < 0) {
+      alert("Please enter a valid cost (0 or higher)");
       return;
     }
 
@@ -641,17 +690,38 @@ export default function App() {
         shadesList = shadeCache.current[item];
       } else {
         try {
-          const res = await fetch(`/api/core?action=getShades&item=${encodeURIComponent(item)}`);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+          const res = await fetch(`/api/core?action=getShades&item=${encodeURIComponent(item)}`, {
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          
+          if (!res.ok) throw new Error(`Server returned ${res.status}`);
           const data = await res.json();
           shadesList = data.shades || [];
+          if (shadesList.length === 0) {
+            alert(`Warning: No shades found for "${item}". This item may not exist in the registry.`);
+            return;
+          }
           shadeCache.current[item] = shadesList;
-        } catch (err) {
-          console.error("Failed to fetch shades", err);
-          shadesList = [];
+        } catch (err: any) {
+          if (err.name === 'AbortError') {
+            alert("Shade lookup timed out. Please try again.");
+          } else {
+            alert(`Failed to fetch shades for "${item}": ${err.message}`);
+          }
+          console.error("Shade fetch error:", err);
+          return; // Prevent adding item if shade fetch fails
         }
       }
+      
       if (shade) {
         shadeIsValid = shadesList.some(s => s.toLowerCase() === shade.toLowerCase());
+        if (!shadeIsValid) {
+          alert(`"${shade}" is not a valid shade for "${item}". Please select from available shades.`);
+          return;
+        }
       } else {
         shadeIsValid = false;
       }
