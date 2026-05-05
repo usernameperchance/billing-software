@@ -82,18 +82,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "Missing type parameter" });
   }
 
-  try {
-    switch (type) {
-      case "store":
-        return await handleStoreRestock(req, res);
-      case "hooks":
-        return await handleHooksRestock(req, res);
-      default:
-        return res.status(400).json({ error: `Unknown type: ${type}` });
-    }
-  } catch (err: any) {
-    console.error(err);
-    res.status(500).json({ error: err.message || "Failed to generate restock" });
+  switch (type) {
+    case "store":
+      return await handleStoreRestock(req, res);
+    case "hooks":
+      return await handleHooksRestock(req, res);
+    default:
+      return res.status(400).json({ error: `Unknown type: ${type}` });
   }
 }
 
@@ -105,9 +100,10 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "Missing item parameter. Use 'all' for full list or specify an item name." });
   }
 
-  const client = await auth.getClient();
-  const gsapi = google.sheets({ version: "v4", auth: client as any });
-  const today = getTodayIST();
+  try {
+    const client = await auth.getClient();
+    const gsapi = google.sheets({ version: "v4", auth: client as any });
+    const today = getTodayIST();
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
@@ -212,6 +208,10 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
   const waLink = `https://wa.me/${RESTOCK_PHONE}?text=${encodeURIComponent(message)}`;
 
   return res.status(200).json({ message, waLink, summary: `${totalShades} shade(s) need restock${isAll ? " across all items" : ` for ${itemsToProcess[0]}`}` });
+  } catch (err: any) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to generate restock" });
+  }
 }
 
 async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {

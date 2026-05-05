@@ -1167,7 +1167,12 @@ export default function App() {
                 Cancel
               </button>
               <button
-                onClick={() => { removeItem(deleteConfirmIdx); }}
+                onClick={(e) => { 
+                  e.preventDefault();
+                  if (deleteConfirmIdx !== null) {
+                    removeItem(deleteConfirmIdx);
+                  }
+                }}
                 style={{
                   padding: "10px 18px",
                   fontSize: "12px",

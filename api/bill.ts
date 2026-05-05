@@ -73,6 +73,22 @@ async function logLoftFallback(
       fields: "sheets.properties.title",
     });
     const sheetExists = (sheetMeta.data.sheets || []).some((s: any) => s.properties?.title === "Loft Fallback Log");
+    
+    if (!sheetExists) {
+      await gsapi.spreadsheets.batchUpdate({
+        spreadsheetId: STORE_SHEET_ID,
+        requestBody: {
+          requests: [{ addSheet: { properties: { title: "Loft Fallback Log" } } }]
+        }
+      });
+      await gsapi.spreadsheets.values.update({
+        spreadsheetId: STORE_SHEET_ID,
+        range: "Loft Fallback Log!A1:F1",
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [["Timestamp", "Bill No", "Item", "Shade", "Qty From Loft", "Date"]] }
+      });
+    }
+    
     await gsapi.spreadsheets.values.append({
       spreadsheetId: STORE_SHEET_ID,
       range: "Loft Fallback Log!A:F",
