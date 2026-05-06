@@ -1622,17 +1622,17 @@ export default function App() {
               </div>
             )}
             <div style={{ fontSize: "11px", color: "#1a1a1a", fontWeight: 600 }}>
-              <span style={styles.metaLabel}>Customer:</span> {customerName || "Walk-in"}
+              <span style={styles.metaLabel}>Customer:</span> {customerName || ""}
             </div>
             <div style={{ fontSize: "11px", color: "#1a1a1a", fontWeight: 600 }}>
-              <span style={styles.metaLabel}>Phone:</span> {phone || "—"}
+              <span style={styles.metaLabel}>Phone:</span> {phone || ""}
             </div>
           </div>
 
           {/*bill no, date, time*/}
           <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "flex-start" }}>
             <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
-              <span style={styles.metaLabel}>Bill No:</span> #{nextBillNo ?? "—"}
+              <span style={styles.metaLabel}>Bill No:</span> #{nextBillNo ?? ""}
             </div>
             <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
               <span style={styles.metaLabel}>Date:</span> {billDate}
@@ -2103,7 +2103,7 @@ export default function App() {
                 <strong>Customer:</strong> {retrievedBill.customerName} ({retrievedBill.customerId})
               </div>
               <div style={{ marginBottom: "4px" }}>
-                <strong>Phone:</strong> {retrievedBill.customerPhone || "Walk-in"}
+                <strong>Phone:</strong> {retrievedBill.customerPhone || ""}
               </div>
               <div style={{ marginBottom: "8px" }}>
                 <strong>Date & Time:</strong> {retrievedBill.date} {retrievedBill.time}
