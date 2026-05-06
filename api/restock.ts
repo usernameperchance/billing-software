@@ -9,7 +9,7 @@ const auth = new google.auth.GoogleAuth({
 
 const STORE_SHEET_ID = process.env.SHEET_ID!;
 const LOFT_SHEET_ID = process.env.LOFT_SHEET_ID!;
-const RESTOCK_PHONE = "9820467786";
+const RESTOCK_PHONE = "9004452933";
 
 const LOW_STOCK_THRESHOLD = 2;
 
@@ -126,10 +126,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
     spreadsheetId: STORE_SHEET_ID,
     fields: "sheets.properties.title",
   });
-  const skipTabs = [
-    "bill", "registry", "profit", "discount", "discounts", "customers",
-    "pointslog", "pointsconfig", "restock requests", "loft fallback log"
-  ];
+  const skipTabs = ["bill", "registry", "profit", "discount", "discounts", "customers", "pointslog", "pointsconfig", "restock requests", "loft fallback log"];
   const allItemTabs = (sheetMeta.data.sheets || [])
     .map(s => s.properties?.title || "")
     .filter(name => name && !skipTabs.includes(name.toLowerCase()));
@@ -151,7 +148,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
 
   for (const tab of itemsToProcess) {
     try {
-      // New column layout: B=shade, C=stock
       const stockRes = await gsapi.spreadsheets.values.get({
         spreadsheetId: STORE_SHEET_ID,
         range: `'${tab.replace(/'/g, "''")}'!B2:C`,
@@ -193,17 +189,14 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
 
   if (newRequests.length > 0) {
     await gsapi.spreadsheets.values.append({
-      spreadsheetId: STORE_SHEET_ID,
-      range: "Restock Requests!A:D",
-      valueInputOption: "USER_ENTERED",
-      requestBody: { values: newRequests },
+      spreadsheetId: STORE_SHEET_ID, range: "Restock Requests!A:D", valueInputOption: "USER_ENTERED", requestBody: { values: newRequests },
     });
   }
 
   const header = isAll
-    ? `📋 *FULL HOOKS RESTOCK — ${today}*\n⚠️ Items below ${LOW_STOCK_THRESHOLD} (not yet requested this week):\n\n`
-    : `📋 *HOOKS RESTOCK — ${today}*\nItem: *${itemsToProcess[0].toUpperCase()}*\n⚠️ Shades below ${LOW_STOCK_THRESHOLD} (not yet requested this week):\n\n`;
-  const footer = `\n📦 Total shades to restock: ${totalShades}`;
+    ? `*FULL HOOKS RESTOCK — ${today}*\n⚠️ Items below ${LOW_STOCK_THRESHOLD} (not yet requested this week):\n\n`
+    : `*HOOKS RESTOCK — ${today}*\nItem: *${itemsToProcess[0].toUpperCase()}*\n⚠️ Shades below ${LOW_STOCK_THRESHOLD} (not yet requested this week):\n\n`;
+  const footer = `\nTotal shades to restock: ${totalShades}`;
   const message = header + restockLines.join("\n") + footer;
   const waLink = `https://wa.me/${RESTOCK_PHONE}?text=${encodeURIComponent(message)}`;
 
@@ -226,7 +219,6 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
   const moq = await getMOQ(gsapi, item);
   const packetSize = await getPacketSize(gsapi, item);
 
-  // Store sheet new columns: B=shade, C=stock, F=loftIndiv, G=loftPackets, H=bhiwandi
   const storeRes = await gsapi.spreadsheets.values.get({
     spreadsheetId: STORE_SHEET_ID,
     range: `'${item.replace(/'/g, "''")}'!B2:H`,
@@ -291,23 +283,23 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ message: "All items sufficiently stocked", transfers: [], shortages: [] });
   }
 
-  const lines: string[] = [`📋 *HOOKS RESTOCK PLAN — ${item}*\n`];
+  const lines: string[] = [`*HOOKS RESTOCK PLAN — ${item}*\n`];
   for (const t of transfers) {
     lines.push(`*${t.shade}*`);
     lines.push(`  Current: ${t.hooksStock} | Target: ${t.moq}`);
     for (const tr of t.transfers) {
       if (tr.from === "Bhiwandi") {
-        lines.push(`  ✅ Transfer ${tr.qty} from Bhiwandi`);
+        lines.push(`Transfer ${tr.qty} from Bhiwandi`);
       } else {
         const b = tr.breakdown;
         const desc = b.packets > 0 ? `${b.individuals} indiv + ${b.packets} pkt (leftover: ${b.leftover})` : `${b.individuals} indiv`;
-        lines.push(`  ✅ Transfer ${tr.qty} from Loft (${desc})`);
+        lines.push(`Transfer ${tr.qty} from Loft (${desc})`);
       }
     }
     lines.push("");
   }
   if (shortages.length > 0) {
-    lines.push("⚠️ *Still Short (request from Bhiwandi):*");
+    lines.push("*Still Short (request from Bhiwandi):*");
     for (const s of shortages) lines.push(`  ${s.shade} — ${s.needed} pkt`);
   }
 

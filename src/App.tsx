@@ -8,7 +8,7 @@ type BillItem = {
   qty: number;
   cost: number;
   price: number;
-  originalPrice?: number; // For Triosoft bulk pricing restoration
+  originalPrice?: number; // triosoft
   total: number;
   profit: number;
   misc?: boolean;
@@ -65,8 +65,12 @@ export default function App() {
   const [showShadeDropdown, setShowShadeDropdown] = useState(false);
   const [shadeDropdownIndex, setShadeDropdownIndex] = useState(-1);
   const [customerType, setCustomerType] = useState<"walk-in" | "courier">("walk-in");
+  const [showBillRetrieval, setShowBillRetrieval] = useState(false);
+  const [billSearchNo, setBillSearchNo] = useState("");
+  const [retrievedBill, setRetrievedBill] = useState<any>(null);
+  const [billRetrievalLoading, setBillRetrievalLoading] = useState(false);
 
-  // Validate recovered bill prices against current prices
+  // validate recovered bill prices against current prices
   const validateRecoveredPrices = async (recoveredItems: any[]) => {
     const changes: string[] = [];
     const validatedItems = await Promise.all(
@@ -101,7 +105,7 @@ export default function App() {
     }
   }, [items, customerName, phone, redeemPoints, courierCharges]);
 
-  // Show toast for a few seconds
+  // show toast for a few seconds
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 3500);
@@ -109,7 +113,7 @@ export default function App() {
     }
   }, [toast]);
 
-  // Recover unsaved bill on mount
+  // recover unsaved bill on mount
   useEffect(() => {
     const draft = localStorage.getItem("billDraft");
     if (draft) {
@@ -118,7 +122,7 @@ export default function App() {
         if (draftItems?.length > 0) {
           const shouldRecover = window.confirm("You have an unsaved bill. Would you like to recover it?\n\nWarning: Prices may have changed. They will be validated when you save.");
           if (shouldRecover) {
-            // Validate recovered prices against current prices
+            // validate recovered prices against current prices
             validateRecoveredPrices(draftItems).then((validationResult) => {
               if (!validationResult.isValid) {
                 setToast({
@@ -498,7 +502,7 @@ export default function App() {
     setTimeout(() => qtyRef.current?.focus(), 50);
   };
 
-  // Dynamically check if item has multiple shades (dropdown only if multiple options)
+  // dynamically check if item has multiple shades (dropdown only if multiple options)
   const needsShadeDropdown = shades.length > 1;
   const filteredItems = item.trim()
     ? itemFuse.search(item).map(r => r.item).slice(0, 8)
@@ -538,7 +542,7 @@ export default function App() {
       const target = e.target as HTMLElement;
       const tag = target.tagName;
 
-      // Keyboard shortcuts
+      // keyboard shortcuts
       if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
         if (isPhoneValid && items.length > 0 && !saving) {
@@ -659,7 +663,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode, isPhoneValid, saving, shadeDropdownIndex]);
 
-  // Helper function to apply Triosoft bulk pricing
+  // helper function to apply triosoft bulk pricing
   const applyTriosoftPricing = (itemsList: BillItem[]): BillItem[] => {
     const totalTriosoftQty = itemsList.reduce((sum, i) => 
       i.item.toLowerCase() === "triosoft" ? sum + i.qty : sum, 0
@@ -681,7 +685,7 @@ export default function App() {
   };
 
   const addItem = async (fromBarcode = false) => {
-    // Pre-flight validation
+    // pre-flight validation
     if (!item || !item.trim()) {
       alert("Please enter an item name");
       return;
@@ -691,7 +695,7 @@ export default function App() {
       return;
     }
     if (price === undefined || price === null || price < 0) {
-      alert("Please enter a valid price (0 or higher)");
+      alert("Please enter a valid price");
       return;
     }
     if (price === 0) {
@@ -699,7 +703,7 @@ export default function App() {
       return;
     }
     if (cost === undefined || cost === null || cost < 0) {
-      alert("Please enter a valid cost (0 or higher)");
+      alert("Please enter a valid cost");
       return;
     }
 
@@ -735,7 +739,7 @@ export default function App() {
             alert(`Failed to fetch shades for "${item}": ${err.message}`);
           }
           console.error("Shade fetch error:", err);
-          return; // Prevent adding item if shade fetch fails
+          return; // prevent adding item if shade fetch fails
         }
       }
       
@@ -769,7 +773,7 @@ export default function App() {
       qty,
       cost: cost || 0,
       price,
-      originalPrice: price, // Store original price for Triosoft bulk pricing restoration
+      originalPrice: price, // store original price for triosoft
       total,
       profit,
       misc: isMisc,
@@ -890,7 +894,7 @@ export default function App() {
     setSavingProgress(true);
 
     try {
-      // Apply Triosoft bulk pricing: if total qty is multiple of 6, set all to ₹110
+      // apply triosoft bulk pricing: if total qty is multiple of 6, set all to 110
       let itemsToSave = items.map(item => ({ ...item }));
       const triosoftTotal = itemsToSave.reduce((sum, item) => 
         item.item.toLowerCase() === "triosoft" ? sum + item.qty : sum, 0
@@ -1052,6 +1056,29 @@ export default function App() {
       else showToast("Please attach the bill image manually in WhatsApp.", "info");
     }
     setSavingProgress(false);
+  };
+
+  const retrieveBillByNo = async (billNo: number) => {
+    if (!billNo || billNo <= 0) {
+      showToast("Enter valid bill number", "error");
+      return;
+    }
+    setBillRetrievalLoading(true);
+    try {
+      const res = await fetch(`/api/bill?action=getBill&billNo=${billNo}`);
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Bill not found", "error");
+        setRetrievedBill(null);
+      } else {
+        setRetrievedBill(data.bill);
+        showToast(`Bill #${billNo} retrieved`, "success");
+      }
+    } catch (err) {
+      showToast(`Error retrieving bill: ${err}`, "error");
+    } finally {
+      setBillRetrievalLoading(false);
+    }
   };
 
   const generateStoreRestock = async () => {
@@ -1258,7 +1285,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
+      {/* delete confirm */}
       {deleteConfirmIdx !== null && (
         <div style={{
           position: "fixed",
@@ -1567,13 +1594,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* Professional bill area with a solid border – like a supermarket receipt */}
+      {/*bill ui*/}
       <div id="print-bill" style={styles.billArea}>
         <div style={styles.billHeader}>
           <img src="/logo.svg" alt="logo" style={styles.logo} crossOrigin="anonymous" />
         </div>
 
-        {/* Unified info box: customer on left, bill details on right */}
+        {/* unified info box: customer on left, bill details on right */}
         <div style={{
           border: "1px solid #e2e8f0",
           borderRadius: "0px",
@@ -1587,7 +1614,7 @@ export default function App() {
           gap: "24px",
           fontFamily: "'Montserrat', sans-serif",
         }}>
-          {/* LEFT: Customer Info */}
+          {/* customer info */}
           <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1 }}>
             {customer?.customerId && (
               <div style={{ fontSize: "11px", color: "#0f172a", fontWeight: 700 }}>
@@ -1602,7 +1629,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* RIGHT: Bill Details - 3 Separate Lines */}
+          {/*bill no, date, time*/}
           <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "flex-start" }}>
             <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
               <span style={styles.metaLabel}>Bill No:</span> #{nextBillNo ?? "—"}
@@ -1919,7 +1946,7 @@ export default function App() {
         )}
         {customerType === "courier" && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Montserrat', sans-serif", marginTop: "8px" }}>
-            <span style={{ fontSize: "13px", fontWeight: 600, minWidth: "120px" }}>🚚 Courier Charges:</span>
+            <span style={{ fontSize: "13px", fontWeight: 600, minWidth: "120px" }}>Courier Charges:</span>
             <input
               type="text"
               inputMode="decimal"
@@ -1942,11 +1969,11 @@ export default function App() {
         )}
         {customerType === "walk-in" && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Montserrat', sans-serif", marginTop: "8px", color: "#aaa" }}>
-            <span style={{ fontSize: "12px" }}>💡 Walk-in mode: No courier charges</span>
+            <span style={{ fontSize: "12px" }}>Walk-in mode: No courier charges</span>
           </div>
         )}
         {!customer && customerName.trim().length >= 2 && !customerSearchLoading && (
-          <div style={{ fontSize: 13, color: "#888", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 500 }}>🆕 New customer — will be registered on save</div>
+          <div style={{ fontSize: 13, color: "#888", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 500 }}>🆕 New customer, will be registered on save.</div>
         )}
       </div>
 
@@ -1962,6 +1989,16 @@ export default function App() {
             ↶ Undo Delete
           </button>
         )}
+
+        <button
+          style={{
+            ...styles.printBtn,
+            background: "#8b5cf6",
+          }}
+          onClick={() => setShowBillRetrieval(!showBillRetrieval)}
+        >
+          🔍 Retrieve Bill
+        </button>
 
         <button
           style={{
@@ -2019,7 +2056,106 @@ export default function App() {
         </button>
       </div>
 
-      {/* Print Preview Modal */}
+      {/*bill retrieval*/}
+      {showBillRetrieval && (
+        <div style={styles.customerCard}>
+          <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 700 }}>🔍 Retrieve Previous Bill</h3>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              type="number"
+              min="1"
+              value={billSearchNo}
+              onChange={(e) => setBillSearchNo(e.target.value)}
+              placeholder="Enter bill number..."
+              style={{
+                flex: 1,
+                padding: "8px 10px",
+                fontSize: "13px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "4px",
+                outline: "none",
+                fontFamily: "'Montserrat', sans-serif",
+              }}
+            />
+            <button
+              onClick={() => retrieveBillByNo(Number(billSearchNo))}
+              disabled={billRetrievalLoading}
+              style={{
+                padding: "8px 12px",
+                fontSize: "13px",
+                fontWeight: 600,
+                backgroundColor: billRetrievalLoading ? "#ccc" : "#8b5cf6",
+                color: "#fff",
+                border: "none",
+                borderRadius: "4px",
+                cursor: billRetrievalLoading ? "not-allowed" : "pointer",
+                fontFamily: "'Montserrat', sans-serif",
+              }}
+            >
+              {billRetrievalLoading ? "⏳" : "Search"}
+            </button>
+          </div>
+
+          {retrievedBill && (
+            <div style={{ marginTop: "12px", padding: "12px", background: "#f9fafb", borderRadius: "4px", fontSize: "13px", fontFamily: "'Montserrat', sans-serif" }}>
+              <div style={{ fontWeight: 700, marginBottom: "8px", color: "#0f172a" }}>Bill #{retrievedBill.billNo}</div>
+              <div style={{ marginBottom: "4px" }}>
+                <strong>Customer:</strong> {retrievedBill.customerName} ({retrievedBill.customerId})
+              </div>
+              <div style={{ marginBottom: "4px" }}>
+                <strong>Phone:</strong> {retrievedBill.customerPhone || "Walk-in"}
+              </div>
+              <div style={{ marginBottom: "8px" }}>
+                <strong>Date & Time:</strong> {retrievedBill.date} {retrievedBill.time}
+              </div>
+              <div style={{ fontWeight: 700, marginBottom: "8px", borderTop: "1px solid #e5e7eb", paddingTop: "8px" }}>Items:</div>
+              {retrievedBill.items.map((item: any, idx: number) => (
+                <div key={idx} style={{ marginBottom: "4px", display: "flex", justifyContent: "space-between", paddingBottom: "4px", borderBottom: "1px solid #e5e7eb" }}>
+                  <span>{item.item} ({item.shade}) × {item.qty}</span>
+                  <span>₹{item.total}</span>
+                </div>
+              ))}
+              <div style={{ marginTop: "8px", fontWeight: 700, display: "flex", justifyContent: "space-between", fontSize: "14px" }}>
+                <span>Final Total:</span>
+                <span style={{ color: "#10b981" }}>₹{retrievedBill.finalTotal}</span>
+              </div>
+              {retrievedBill.courierCharges > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#dc2626", fontSize: "12px", marginTop: "4px" }}>
+                  <span>Courier:</span>
+                  <span>₹{retrievedBill.courierCharges}</span>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setItems(retrievedBill.items);
+                  setCustomerName(retrievedBill.customerName);
+                  setPhone(retrievedBill.customerPhone);
+                  setCourierCharges(retrievedBill.courierCharges);
+                  setShowBillRetrieval(false);
+                  showToast("Bill loaded. You can now reprint or modify.", "success");
+                }}
+                style={{
+                  marginTop: "12px",
+                  padding: "8px 12px",
+                  width: "100%",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  backgroundColor: "#10b981",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontFamily: "'Montserrat', sans-serif",
+                }}
+              >
+                📋 Load for Reprint
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/*print preview*/}
       {printPreview && (
         <div style={styles.previewOverlay} onClick={() => setPrintPreview(false)}>
           <div style={styles.previewModal} onClick={(e) => e.stopPropagation()}>
@@ -2064,16 +2200,16 @@ export default function App() {
                       </div>
                     )}
                     <div style={{ fontSize: "11px", color: "#1a1a1a", fontWeight: 600 }}>
-                      <span style={styles.metaLabel}>Customer:</span> {customerName || "Walk-in"}
+                      <span style={styles.metaLabel}>Customer:</span> {customerName || ""}
                     </div>
                     <div style={{ fontSize: "11px", color: "#1a1a1a", fontWeight: 600 }}>
-                      <span style={styles.metaLabel}>Phone:</span> {phone || "—"}
+                      <span style={styles.metaLabel}>Phone:</span> {phone || ""}
                     </div>
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "flex-start" }}>
                     <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
-                      <span style={styles.metaLabel}>Bill No:</span> #{nextBillNo ?? "—"}
+                      <span style={styles.metaLabel}>Bill No:</span> #{nextBillNo ?? ""}
                     </div>
                     <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
                       <span style={styles.metaLabel}>Date:</span> {billDate}

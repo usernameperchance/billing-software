@@ -83,7 +83,6 @@ async function handleGetPrice(gsapi: any, req: VercelRequest, res: VercelRespons
     return res.status(400).json({ error: "Missing item or shade parameter" });
   }
 
-  // Shade in B, stock in C, price in D
   const response = await gsapi.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: `'${item.replace(/'/g, "''")}'!B2:D`,
@@ -199,7 +198,6 @@ async function handleSearchCustomersByName(gsapi: any, req: VercelRequest, res: 
   const rows = response.data.values || [];
   const searchTerm = name.toLowerCase().trim();
 
-  // Simple fuzzy match - find all rows where name contains the search term
   const matches = rows
     .filter((r: any) => r[1]?.toString().toLowerCase().includes(searchTerm))
     .map((r: any) => ({
@@ -229,7 +227,7 @@ async function handleSearchCustomersById(gsapi: any, req: VercelRequest, res: Ve
   const rows = response.data.values || [];
   const searchId = customerId.toUpperCase().trim();
 
-  // Find exact match by Customer ID
+  // find exact match by Customer ID
   const matchedRow = rows.find((r: any) => r[0]?.toString().toUpperCase() === searchId);
 
   if (!matchedRow) {
