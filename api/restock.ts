@@ -128,7 +128,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       spreadsheetId: STORE_SHEET_ID,
       fields: "sheets.properties.title",
     });
-    const skipTabs = ["bill", "registry", "profit", "discount", "discounts", "customers", "pointslog", "pointsconfig", "restock requests", "loft fallback log"];
+    const skipTabs = ["bill", "registry", "profit", "discount", "discounts", "customers", "pointslog", "restock requests", "loft fallback log", "dashboard"];
     const allItemTabs = (sheetMeta.data.sheets || [])
       .map(s => s.properties?.title || "")
       .filter(name => name && !skipTabs.includes(name.toLowerCase()));
