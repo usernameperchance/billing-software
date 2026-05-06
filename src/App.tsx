@@ -8,6 +8,7 @@ type BillItem = {
   qty: number;
   cost: number;
   price: number;
+  originalPrice?: number; // For Triosoft bulk pricing restoration
   total: number;
   profit: number;
   misc?: boolean;
@@ -657,6 +658,27 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [item, shade, price, qty, cost, shades, items, itemSuggestion, shadeSuggestion, isStandard, allItems, allShadesAreNumeric, barcode, isPhoneValid, saving, shadeDropdownIndex]);
 
+  // Helper function to apply Triosoft bulk pricing
+  const applyTriosoftPricing = (itemsList: BillItem[]): BillItem[] => {
+    const totalTriosoftQty = itemsList.reduce((sum, i) => 
+      i.item.toLowerCase() === "triosoft" ? sum + i.qty : sum, 0
+    );
+    
+    if (totalTriosoftQty > 0 && totalTriosoftQty % 6 === 0) {
+      return itemsList.map((i) => 
+        i.item.toLowerCase() === "triosoft"
+          ? { ...i, price: 110, total: i.qty * 110, profit: (110 - i.cost) * i.qty }
+          : i
+      );
+    } else {
+      return itemsList.map((i) => 
+        i.item.toLowerCase() === "triosoft"
+          ? { ...i, price: i.originalPrice || i.price, total: i.qty * (i.originalPrice || i.price), profit: ((i.originalPrice || i.price) - i.cost) * i.qty }
+          : i
+      );
+    }
+  };
+
   const addItem = async (fromBarcode = false) => {
     // Pre-flight validation
     if (!item || !item.trim()) {
@@ -740,16 +762,22 @@ export default function App() {
     const total = qty * price;
     const profit = (price - cost) * qty;
 
-    setItems(prev => [...prev, {
+    const newItem = {
       item: item,
       shade: finalShade,
       qty,
       cost: cost || 0,
       price,
+      originalPrice: price, // Store original price for Triosoft bulk pricing restoration
       total,
       profit,
       misc: isMisc,
-    }]);
+    };
+
+    setItems(prev => {
+      const updatedItems = applyTriosoftPricing([...prev, newItem]);
+      return updatedItems;
+    });
 
     if (fromBarcode) {
       setItem("");
@@ -1070,9 +1098,8 @@ export default function App() {
     if (newQty < 1) return;
     const updated = [...items];
     updated[idx].qty = newQty;
-    updated[idx].total = newQty * updated[idx].price;
-    updated[idx].profit = (updated[idx].price - updated[idx].cost) * newQty;
-    setItems(updated);
+    const itemsWithPricing = applyTriosoftPricing(updated);
+    setItems(itemsWithPricing);
   };
 
   const removeItem = (idx: number) => {
