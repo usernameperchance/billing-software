@@ -1871,25 +1871,25 @@ export default function App() {
         )}
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Montserrat', sans-serif", marginTop: "8px" }}>
           <span style={{ fontSize: "13px", fontWeight: 600, minWidth: "120px" }}>🚚 Courier Charges:</span>
-          <input
-            type="number"
-            min="0"
-            value={courierCharges}
-            onChange={(e) => setCourierCharges(Number(e.target.value) || 0)}
-            placeholder="0"
-            style={{
-              width: "100px",
-              padding: "8px 10px",
-              fontSize: "13px",
-              border: "1px solid #cbd5e1",
-              borderRadius: "0px",
-              outline: "none",
-              fontFamily: "'Montserrat', sans-serif",
-              boxSizing: "border-box",
-              WebkitAppearance: "none",
-              MozAppearance: "textfield",
-            }}
-          />
+         <input
+  type="number"
+  min="0"
+  value={courierCharges}
+  onChange={(e) => setCourierCharges(Number(e.target.value) || 0)}
+  placeholder="0"
+  style={{
+    width: "100px",
+    padding: "8px 10px",
+    fontSize: "13px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "0px",
+    outline: "none",
+    fontFamily: "'Montserrat', sans-serif",
+    boxSizing: "border-box",
+    WebkitAppearance: "none",
+    MozAppearance: "textfield",
+  }}
+/>
         </div>
         {!customer && customerName.trim().length >= 2 && !customerSearchLoading && (
           <div style={{ fontSize: 13, color: "#888", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 500 }}>🆕 New customer — will be registered on save</div>
