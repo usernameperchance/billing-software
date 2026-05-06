@@ -413,7 +413,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         // parse bill items
         const items = billRows
-          .filter((row: any) => row[1] && row[1] !== "Discount" && row[1] !== "Courier Charges" && row[1] !== "Final Total" && row[1] !== "Points Redeemed")
+          .filter((row: any) => row[1] && row[1] !== "Courier Charges" && row[1] !== "Final Total")
           .map((row: any) => ({
             item: row[1],
             shade: row[2],
@@ -426,17 +426,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         let finalTotal = 0;
         let courierCharges = 0;
-        let discountAmt = 0;
         
-        // extract final total, courier charges, discount from special rows
+        // extract final total, courier charges from special rows
         for (const row of billRows) {
           const itemName = row[1];
           if (itemName === "Final Total") {
             finalTotal = Number(row[10]) || 0;
           } else if (itemName === "Courier Charges") {
             courierCharges = Number(row[9]) || 0;
-          } else if (itemName === "Discount" || itemName === "Points Redeemed") {
-            discountAmt = Number(row[9]) || 0;
           }
         }
         
@@ -451,7 +448,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             time,
             finalTotal,
             courierCharges,
-            discountAmt,
           },
         });
       }
@@ -469,8 +465,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "POST") {
       const {
         items,
-        discountAmt = 0,
-        discountPct = 0,
         finalTotal = 0,
         courierCharges = 0,
         pointsRedeemed = 0,
@@ -704,38 +698,21 @@ try {
         requestBody: { values: billValues },
       });
 
-      const effectiveDiscount = pointsRedeemed > 0 ? pointsRedeemed : discountAmt;
-      if (effectiveDiscount > 0) {
-        const label = pointsRedeemed > 0 ? "Points Redeemed" : "Discount";
-        const valuesToAppend = [
-          [billNo, label, "", "", "", "", date, time, "", "", "", customerId],
-        ];
-        if (courierCharges > 0) {
-          valuesToAppend.push([billNo, "Courier Charges", "", "", "", "", date, time, "", courierCharges, "", customerId]);
-        }
-        valuesToAppend.push([billNo, "Final Total", "", "", "", "", date, time, "", "", finalTotal ?? "", customerId]);
-        
-        await gsapi.spreadsheets.values.append({
-          spreadsheetId: STORE_SHEET_ID,
-          range: "Bill!A:L",
-          valueInputOption: "USER_ENTERED",
-          requestBody: {
-            values: valuesToAppend,
-          },
-        });
-      } else if (courierCharges > 0) {
-        await gsapi.spreadsheets.values.append({
-          spreadsheetId: STORE_SHEET_ID,
-          range: "Bill!A:L",
-          valueInputOption: "USER_ENTERED",
-          requestBody: {
-            values: [
-              [billNo, "Courier Charges", "", "", "", "", date, time, "", courierCharges, "", customerId],
-              [billNo, "Final Total", "", "", "", "", date, time, "", "", finalTotal ?? "", customerId],
-            ],
-          },
-        });
+      // Always append Final Total row, and Courier Charges row if applicable
+      const finalRowsToAppend = [];
+      if (courierCharges > 0) {
+        finalRowsToAppend.push([billNo, "Courier Charges", "", "", "", "", date, time, "", courierCharges, "", customerId]);
       }
+      finalRowsToAppend.push([billNo, "Final Total", "", "", "", "", date, time, "", "", finalTotal ?? "", customerId]);
+
+      await gsapi.spreadsheets.values.append({
+        spreadsheetId: STORE_SHEET_ID,
+        range: "Bill!A:L",
+        valueInputOption: "USER_ENTERED",
+        requestBody: {
+          values: finalRowsToAppend,
+        },
+      });
 
       return res.status(200).json({ success: true, billNo, customerId });
     }

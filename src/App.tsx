@@ -14,7 +14,6 @@ type BillItem = {
   misc?: boolean;
 };
 
-type Slab = { minTotal: number; maxTotal: number; pct: number };
 type Customer = { customerId: string; name: string; phone: string; phone2?: string; points: number; totalSpend: number; totalBills: number };
 type PointsConfig = { earnRate: number; redeemRate: number; minRedeem: number };
 
@@ -30,7 +29,6 @@ export default function App() {
   const [warnedKey, setWarnedKey] = useState<string | null>(null);
   const [nextBillNo, setNextBillNo] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const [slabs, setSlabs] = useState<Slab[]>([]);
   const [phone, setPhone] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -379,12 +377,7 @@ export default function App() {
       .catch(console.error);
   }, []);
 
-  useEffect(() => {
-    fetch("/api/core?action=getDiscounts")
-      .then(res => res.json())
-      .then(data => setSlabs(data.slabs || []))
-      .catch(() => {});
-  }, []);
+
 
   useEffect(() => {
     fetch("/api/core?action=getPointsConfig")
@@ -806,21 +799,7 @@ export default function App() {
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
 
-  const getApplicableSlab = (total: number) =>
-    slabs.find(s => total >= s.minTotal && total <= s.maxTotal) || null;
-
-  const applicableSlab = getApplicableSlab(grandTotal);
-  const slabDiscount = applicableSlab ? Math.round(grandTotal * applicableSlab.pct / 100) : 0;
-
-  const pointsDiscount = (() => {
-    if (!redeemPoints || !pointsConfig || !customerMatchesPhone) return 0;
-    if (customer.points < pointsConfig.minRedeem) return 0;
-    return Math.floor(customer.points * pointsConfig.redeemRate);
-  })();
-
-  const discountAmt = pointsDiscount > 0 ? pointsDiscount : slabDiscount;
-  const discountPct = pointsDiscount > 0 ? 0 : (applicableSlab?.pct ?? 0);
-  const finalTotal = grandTotal - discountAmt + courierCharges;
+  const finalTotal = grandTotal + courierCharges;
 
   const captureBillImage = async (): Promise<Blob | null> => {
     const billEl = document.getElementById("print-bill");
@@ -927,11 +906,9 @@ export default function App() {
         },
         body: JSON.stringify({
           items: itemsToSave,
-          discountAmt,
           courierCharges: customerType === "walk-in" ? 0 : courierCharges,
-          discountPct,
           finalTotal: finalTotalToSave,
-          pointsRedeemed: pointsDiscount,
+          pointsRedeemed: 0,
           customer: phone ? { name: customerName, phone } : null,
           earnRate: pointsConfig?.earnRate ?? 0,
           redeemRate: pointsConfig?.redeemRate ?? 0,
@@ -1783,16 +1760,7 @@ export default function App() {
             <span>Net Profit</span>
             <span>₹{grandProfit}</span>
           </div>
-          {discountAmt > 0 && (
-            <div style={{ ...styles.discountRow, display: "flex", justifyContent: "space-between", paddingRight: "8px" }}>
-              <span>
-                {pointsDiscount > 0
-                  ? `Points Redeemed`
-                  : `Discount (${applicableSlab?.pct}%)`}
-              </span>
-              <span>− ₹{discountAmt}</span>
-            </div>
-          )}
+
           {courierCharges > 0 && (
             <div style={{ ...styles.discountRow, display: "flex", justifyContent: "space-between", paddingRight: "8px", color: "#dc2626" }}>
               <span>Courier Charges</span>
