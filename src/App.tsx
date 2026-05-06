@@ -64,6 +64,7 @@ export default function App() {
   const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [showShadeDropdown, setShowShadeDropdown] = useState(false);
   const [shadeDropdownIndex, setShadeDropdownIndex] = useState(-1);
+  const [customerType, setCustomerType] = useState<"walk-in" | "courier">("walk-in");
 
   // Validate recovered bill prices against current prices
   const validateRecoveredPrices = async (recoveredItems: any[]) => {
@@ -923,7 +924,7 @@ export default function App() {
         body: JSON.stringify({
           items: itemsToSave,
           discountAmt,
-          courierCharges,
+          courierCharges: customerType === "walk-in" ? 0 : courierCharges,
           discountPct,
           finalTotal: finalTotalToSave,
           pointsRedeemed: pointsDiscount,
@@ -1552,15 +1553,14 @@ export default function App() {
           />
           <input
             ref={priceRef}
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={price}
-            onChange={(e) => setPrice(Number(e.target.value))}
+            onChange={(e) => setPrice(Number(e.target.value) || 0)}
             placeholder="Price"
             style={{
               ...styles.smallInput,
               maxWidth: 100,
-              WebkitAppearance: "none",
-              MozAppearance: "textfield",
             }}
           />
           <button style={styles.button} onClick={() => { addItem(false); }}>Add</button>
@@ -1782,6 +1782,54 @@ export default function App() {
       </div>
 
       <div className="no-print" style={styles.customerCard}>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+          <button
+            onClick={() => {
+              setCustomerType("walk-in");
+              setCustomerName("");
+              setPhone("");
+              setCustomer(null);
+              setCourierCharges(0);
+            }}
+            style={{
+              flex: 1,
+              padding: "8px 12px",
+              fontSize: "13px",
+              fontWeight: customerType === "walk-in" ? 700 : 500,
+              backgroundColor: customerType === "walk-in" ? "#10b981" : "#e5e7eb",
+              color: customerType === "walk-in" ? "#fff" : "#374151",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontFamily: "'Montserrat', sans-serif",
+            }}
+          >
+            👤 Walk-in
+          </button>
+          <button
+            onClick={() => {
+              setCustomerType("courier");
+              setCustomerName("");
+              setPhone("");
+              setCustomer(null);
+            }}
+            style={{
+              flex: 1,
+              padding: "8px 12px",
+              fontSize: "13px",
+              fontWeight: customerType === "courier" ? 700 : 500,
+              backgroundColor: customerType === "courier" ? "#3b82f6" : "#e5e7eb",
+              color: customerType === "courier" ? "#fff" : "#374151",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontFamily: "'Montserrat', sans-serif",
+            }}
+          >
+            🚚 Courier
+          </button>
+        </div>
+
         <div style={styles.row}>
           <div style={{ position: "relative", flex: 1 }}>
             <input
@@ -1869,28 +1917,34 @@ export default function App() {
             )}
           </div>
         )}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Montserrat', sans-serif", marginTop: "8px" }}>
-          <span style={{ fontSize: "13px", fontWeight: 600, minWidth: "120px" }}>🚚 Courier Charges:</span>
-         <input
-  type="number"
-  min="0"
-  value={courierCharges}
-  onChange={(e) => setCourierCharges(Number(e.target.value) || 0)}
-  placeholder="0"
-  style={{
-    width: "100px",
-    padding: "8px 10px",
-    fontSize: "13px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "0px",
-    outline: "none",
-    fontFamily: "'Montserrat', sans-serif",
-    boxSizing: "border-box",
-    WebkitAppearance: "none",
-    MozAppearance: "textfield",
-  }}
-/>
-        </div>
+        {customerType === "courier" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Montserrat', sans-serif", marginTop: "8px" }}>
+            <span style={{ fontSize: "13px", fontWeight: 600, minWidth: "120px" }}>🚚 Courier Charges:</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              min="0"
+              value={courierCharges}
+              onChange={(e) => setCourierCharges(Number(e.target.value) || 0)}
+              placeholder="0"
+              style={{
+                width: "100px",
+                padding: "8px 10px",
+                fontSize: "13px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "0px",
+                outline: "none",
+                fontFamily: "'Montserrat', sans-serif",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+        )}
+        {customerType === "walk-in" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Montserrat', sans-serif", marginTop: "8px", color: "#aaa" }}>
+            <span style={{ fontSize: "12px" }}>💡 Walk-in mode: No courier charges</span>
+          </div>
+        )}
         {!customer && customerName.trim().length >= 2 && !customerSearchLoading && (
           <div style={{ fontSize: 13, color: "#888", marginTop: 6, fontFamily: "'Montserrat', sans-serif", fontWeight: 500 }}>🆕 New customer — will be registered on save</div>
         )}
