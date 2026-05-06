@@ -18,6 +18,10 @@ function getTodayIST(): string {
   return new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
 }
 
+function escapeSheetName(name: string): string {
+  return `'${name.replace(/'/g, "''")}'`;
+}
+
 async function getPacketSize(gsapi: any, article: string): Promise<number> {
   try {
     const res = await gsapi.spreadsheets.values.get({
@@ -34,7 +38,6 @@ async function getPacketSize(gsapi: any, article: string): Promise<number> {
   return 5;
 }
 
-// helper to parse dd/MM/yyyy date from sheet
 function parseDate(dateStr: string): Date | null {
   if (!dateStr) return null;
   const parts = dateStr.toString().split('/');
@@ -91,7 +94,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ============= STORE RESTOCK (low stock alert, deduplicate weekly, update to "Notified") =============
+// ============= STORE RESTOCK (low stock alert, deduplicate weekly, mark as Notified) =============
 async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
   const { item } = req.query;
   const isAll = item === "all";
@@ -109,7 +112,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
 
     await ensureRestockRequestsSheet(gsapi);
 
-    // fetch recent requests that are still "Pending" or "Notified" within the last 7 days
+    // Fetch recent requests (any status) within last 7 days
     const reqRes = await gsapi.spreadsheets.values.get({
       spreadsheetId: STORE_SHEET_ID,
       range: "Restock Requests!A2:D",
@@ -123,23 +126,39 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Get all item sheets
+    // Get all sheets
     const sheetMeta = await gsapi.spreadsheets.get({
       spreadsheetId: STORE_SHEET_ID,
-      fields: "sheets.properties.title",
+      fields: "sheets.properties(title)",
     });
-    const skipTabs = ["bill", "registry", "profit", "discount", "discounts", "customers", "pointslog", "restock requests", "loft fallback log", "dashboard"];
-    const allItemTabs = (sheetMeta.data.sheets || [])
-      .map(s => s.properties?.title || "")
-      .filter(name => name && !skipTabs.includes(name.toLowerCase()));
+    const allSheets = (sheetMeta.data.sheets || []).map(s => s.properties?.title || "");
+
+    const skipTabs = ["bill", "registry", "profit", "discount", "discounts", "customers", "pointslog", "pointsconfig", "restock requests", "loft fallback log", "dashboard"];
+
+    // Build list of valid item sheets: must have a header "Shade" in row 1
+    const itemSheets: string[] = [];
+    for (const sheetName of allSheets) {
+      if (skipTabs.includes(sheetName.toLowerCase())) continue;
+      try {
+        const headers = await gsapi.spreadsheets.values.get({
+          spreadsheetId: STORE_SHEET_ID,
+          range: `${escapeSheetName(sheetName)}!1:1`,
+        });
+        const headerRow = headers.data.values?.[0] || [];
+        const hasShade = headerRow.some(h => h?.toString().trim().toLowerCase() === "shade");
+        if (hasShade) itemSheets.push(sheetName);
+      } catch (err) {
+        console.warn(`Could not read headers for sheet ${sheetName}:`, err);
+      }
+    }
 
     let itemsToProcess: string[] = [];
     if (isAll) {
-      itemsToProcess = allItemTabs;
+      itemsToProcess = itemSheets;
     } else {
-      const matchedItem = allItemTabs.find(tab => tab.toLowerCase() === item.toLowerCase());
+      const matchedItem = itemSheets.find(tab => tab.toLowerCase() === item.toLowerCase());
       if (!matchedItem) {
-        return res.status(404).json({ error: `Item sheet '${item}' not found.` });
+        return res.status(404).json({ error: `Item sheet '${item}' not found or is not a valid item sheet.` });
       }
       itemsToProcess = [matchedItem];
     }
@@ -152,7 +171,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       try {
         const stockRes = await gsapi.spreadsheets.values.get({
           spreadsheetId: STORE_SHEET_ID,
-          range: `'${tab.replace(/'/g, "''")}'!B2:C`,
+          range: `${escapeSheetName(tab)}!B2:C`,
         });
         const rows = stockRes.data.values || [];
         let tabLines: string[] = [];
@@ -192,7 +211,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ message: null, summary });
     }
 
-    // append new requests with "Pending" status
+    // Append new requests with "Pending" status
     if (newRequests.length > 0) {
       await gsapi.spreadsheets.values.append({
         spreadsheetId: STORE_SHEET_ID,
@@ -202,6 +221,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // Build message
     const header = isAll
       ? `*FULL HOOKS RESTOCK — ${today}*\n⚠️ Items below ${LOW_STOCK_THRESHOLD} (not yet requested this week):\n\n`
       : `*HOOKS RESTOCK — ${today}*\nItem: *${itemsToProcess[0].toUpperCase()}*\n⚠️ Shades below ${LOW_STOCK_THRESHOLD} (not yet requested this week):\n\n`;
@@ -209,6 +229,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
     const message = header + restockLines.join("\n") + footer;
     const waLink = `https://wa.me/${RESTOCK_PHONE}?text=${encodeURIComponent(message)}`;
 
+    // Mark newly added requests as "Notified"
     if (newRequests.length > 0) {
       const lastRow = await gsapi.spreadsheets.values.get({
         spreadsheetId: STORE_SHEET_ID,
@@ -233,7 +254,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ============= HOOKS RESTOCK PLAN (target = 5 units per shade, cross‑verify with loft/bhiwandi) =============
+// ============= HOOKS RESTOCK PLAN (target = 5 units per shade, cross‑verify with Loft/Bhiwandi) =============
 async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
   const { item } = req.query;
   if (!item || typeof item !== "string") {
@@ -246,10 +267,10 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
 
     const packetSize = await getPacketSize(gsapi, item);
 
-    // read store sheet data: B=shade, C=stock (hooks), F=loftIndiv, G=loftPackets, H=bhiwandi
+    // Read store sheet: B=shade, C=stock (hooks), F=loftIndiv, G=loftPackets, H=bhiwandi
     const storeRes = await gsapi.spreadsheets.values.get({
       spreadsheetId: STORE_SHEET_ID,
-      range: `'${item.replace(/'/g, "''")}'!B2:H`,
+      range: `${escapeSheetName(item)}!B2:H`,
     });
     const storeRows = storeRes.data.values || [];
 
@@ -265,14 +286,13 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
       const loftPackets = Number(row[5]) || 0;
       const bhiwandi = Number(row[6]) || 0;
 
-      // calculate how many units we need to reach TARGET_STOCK (5)
       const needed = TARGET_STOCK - hooksStock;
       if (needed <= 0) continue;
 
       let remaining = needed;
       let plan: any = { shade, hooksStock, target: TARGET_STOCK, transfers: [] };
 
-      // 1. try to take from bhiwandi first
+      // 1. Bhiwandi first
       if (bhiwandi > 0) {
         const fromBhiwandi = Math.min(remaining, bhiwandi);
         if (fromBhiwandi > 0) {
@@ -281,7 +301,7 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // 2. then from loft (individuals + packets)
+      // 2. Loft (individuals then packets)
       if (remaining > 0) {
         const loftTotal = loftIndiv + (loftPackets * packetSize);
         if (loftTotal > 0) {
@@ -304,7 +324,7 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // 3. if still short, record shortage (to be requested from bhiwandi)
+      // 3. Shortage (need to request from Bhiwandi)
       if (remaining > 0) {
         shortages.push({ shade, needed: Math.ceil(remaining / packetSize) });
       }
@@ -318,7 +338,6 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ message: "All shades already at target stock (5 units)", transfers: [], shortages: [] });
     }
 
-    // build WhatsApp message
     const lines: string[] = [`*HOOKS RESTOCK PLAN — ${item}*\nTarget per shade: ${TARGET_STOCK} units\n`];
     for (const t of transfers) {
       lines.push(`*${t.shade}*`);

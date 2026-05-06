@@ -1,3 +1,4 @@
+//app.tsx
 import { useState, useEffect, useRef, useMemo } from "react";
 import Fuse from "fuse.js";
 import html2canvas from "html2canvas";
