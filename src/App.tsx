@@ -861,17 +861,43 @@ export default function App() {
     setSavingProgress(true);
 
     try {
+      // Apply Triosoft bulk pricing: if total qty is multiple of 6, set all to ₹110
+      let itemsToSave = items.map(item => ({ ...item }));
+      const triosoftTotal = itemsToSave.reduce((sum, item) => 
+        item.item.toLowerCase() === "triosoft" ? sum + item.qty : sum, 0
+      );
+      
+      let finalTotalToSave = finalTotal;
+      if (triosoftTotal > 0 && triosoftTotal % 6 === 0) {
+        const originalTriosoftTotal = itemsToSave
+          .filter(item => item.item.toLowerCase() === "triosoft")
+          .reduce((sum, item) => sum + item.total, 0);
+        
+        itemsToSave = itemsToSave.map(item => 
+          item.item.toLowerCase() === "triosoft" 
+            ? { ...item, price: 110, total: item.qty * 110, profit: (110 - item.cost) * item.qty }
+            : item
+        );
+        
+        const newTriosoftTotal = itemsToSave
+          .filter(item => item.item.toLowerCase() === "triosoft")
+          .reduce((sum, item) => sum + item.total, 0);
+        
+        finalTotalToSave = finalTotal - originalTriosoftTotal + newTriosoftTotal;
+        showToast(`✨ Triosoft bulk pricing applied: ${triosoftTotal} items @ ₹110 each`, "success");
+      }
+
       const res = await fetch("/api/bill", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          items,
+          items: itemsToSave,
           discountAmt,
           courierCharges,
           discountPct,
-          finalTotal,
+          finalTotal: finalTotalToSave,
           pointsRedeemed: pointsDiscount,
           customer: phone ? { name: customerName, phone } : null,
           earnRate: pointsConfig?.earnRate ?? 0,
@@ -1319,7 +1345,6 @@ export default function App() {
                 setItem(e.target.value);
                 setShowItemDropdown(true);
               }}
-              onFocus={() => setShowItemDropdown(true)}
               onKeyDown={(e) => {
                 if (e.key === "Tab") {
                   setShowItemDropdown(false);
@@ -1504,7 +1529,12 @@ export default function App() {
             value={price}
             onChange={(e) => setPrice(Number(e.target.value))}
             placeholder="Price"
-            style={{ ...styles.smallInput, maxWidth: 100 }}
+            style={{
+              ...styles.smallInput,
+              maxWidth: 100,
+              WebkitAppearance: "none",
+              MozAppearance: "textfield",
+            }}
           />
           <button style={styles.button} onClick={() => { addItem(false); }}>Add</button>
         </div>
@@ -1829,6 +1859,8 @@ export default function App() {
               outline: "none",
               fontFamily: "'Montserrat', sans-serif",
               boxSizing: "border-box",
+              WebkitAppearance: "none",
+              MozAppearance: "textfield",
             }}
           />
         </div>

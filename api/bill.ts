@@ -275,41 +275,9 @@ async function deductAllItemsStock(
   const appliedOperations = new Map<string, any>(); // For rollback tracking
 
   for (const op of operations) {
-    const { item, shade, storeRowIndex, loftRowIndex, packetSize, qty, timestamp } = op;
-    let storeStock = op.storeStock;
-    let loftIndividuals = op.loftIndividuals;
-    let loftPackets = op.loftPackets;
+    const { item, shade, storeRowIndex, storeStock, loftRowIndex, loftIndividuals, loftPackets, packetSize, qty, timestamp } = op;
 
     try {
-      // RE-READ STORE STOCK JUST BEFORE DEDUCTING (pessimistic lock)
-      if (storeRowIndex !== -1) {
-        const storeRes = await gsapi.spreadsheets.values.get({
-          spreadsheetId: STORE_SHEET_ID,
-          range: `${escapeSheetName(item)}!C${storeRowIndex + 2}`,
-        });
-        const freshStoreStock = Number(storeRes.data.values?.[0]?.[0]) || 0;
-        if (freshStoreStock !== storeStock) {
-          console.warn(`Stock for ${item}/${shade} changed from ${storeStock} to ${freshStoreStock} between validation and deduction`);
-          storeStock = freshStoreStock; // Use the latest value
-        }
-      }
-
-      // RE-READ LOFT STOCK JUST BEFORE DEDUCTING
-      if (loftRowIndex !== -1) {
-        const loftRes = await gsapi.spreadsheets.values.get({
-          spreadsheetId: LOFT_SHEET_ID,
-          range: `${escapeSheetName(item)}!E${loftRowIndex + 2}:F${loftRowIndex + 2}`,
-        });
-        const freshIndividuals = Number(loftRes.data.values?.[0]?.[0]) || 0;
-        const freshPackets = Number(loftRes.data.values?.[0]?.[1]) || 0;
-        if (freshIndividuals !== loftIndividuals || freshPackets !== loftPackets) {
-          console.warn(`Loft stock for ${item}/${shade} changed between validation and deduction`);
-          loftIndividuals = freshIndividuals;
-          loftPackets = freshPackets;
-        }
-      }
-
-      // Now proceed with deduction using CURRENT stock values
       let remaining = qty;
       let usedFromStore = 0;
       let usedFromLoft = 0;
@@ -581,34 +549,18 @@ try {
       });
     }
 
-    // Handle phone updates (Phone 1 and Phone 2) - with duplicate prevention
+    // Handle phone updates (Phone 1 and Phone 2)
     const existingPhone1 = (existing[2]?.toString() || "").replace(/[^0-9]/g, "");
     const existingPhone2 = (existing[3]?.toString() || "").replace(/[^0-9]/g, "");
     
-    // Before adding as Phone 2, check if it's already used by another customer
+    // If provided phone doesn't match Phone 1, update Phone 2
     if (phoneRaw && phoneRaw !== existingPhone1 && phoneRaw !== existingPhone2) {
-      // Check if this phone is already used by ANY other customer
-      let phoneUsedByAnother = false;
-      for (let i = 0; i < custRows.length; i++) {
-        if (i === existingIndex) continue; // Skip current customer
-        const otherPhone1 = (custRows[i][2]?.toString() || "").replace(/[^0-9]/g, "");
-        const otherPhone2 = (custRows[i][3]?.toString() || "").replace(/[^0-9]/g, "");
-        if (phoneRaw === otherPhone1 || phoneRaw === otherPhone2) {
-          phoneUsedByAnother = true;
-          console.warn(`Phone ${phoneRaw} is already linked to customer ${custRows[i][0]}. Not adding as second phone.`);
-          break;
-        }
-      }
-      
-      // Only add as Phone 2 if not already used by another customer
-      if (!phoneUsedByAnother) {
-        await gsapi.spreadsheets.values.update({
-          spreadsheetId: STORE_SHEET_ID,
-          range: `Customers!D${updateRow}`,
-          valueInputOption: "USER_ENTERED",
-          requestBody: { values: [[phoneRaw]] },
-        });
-      }
+      await gsapi.spreadsheets.values.update({
+        spreadsheetId: STORE_SHEET_ID,
+        range: `Customers!D${updateRow}`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [[phoneRaw]] },
+      });
     }
 
     // Update lastVisit (F), spend (G), bills (H), points (I)
