@@ -945,6 +945,7 @@ export default function App() {
       setPhone("");
       setRedeemPoints(false);
       setCourierCharges(0);
+      setAmountReceived(0);
 
       showToast(`Bill #${nextBillNo} saved successfully!`, "success");
       return true;
