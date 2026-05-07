@@ -40,10 +40,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleSearchCustomersByName(gsapi, req, res);
       case "searchCustomersById":
         return await handleSearchCustomersById(gsapi, req, res);
-      case "getDiscounts":
-        return await handleGetDiscounts(gsapi, res);
-      case "getPointsConfig":
-        return await handleGetPointsConfig(gsapi, res);
       default:
         return res.status(400).json({ error: `Unknown action: ${action}` });
     }
@@ -68,7 +64,6 @@ async function handleGetShades(gsapi: any, req: VercelRequest, res: VercelRespon
     return res.status(400).json({ error: "Missing item parameter" });
   }
 
-  // Shade column is now B (after barcode in A)
   const response = await gsapi.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: `'${item.replace(/'/g, "''")}'!B2:B`,
@@ -123,24 +118,28 @@ async function handleGetCost(gsapi: any, req: VercelRequest, res: VercelResponse
     return res.status(400).json({ error: "Missing item parameter" });
   }
 
+  const normalizedItem = item.toString().trim().toLowerCase();
+  const normalizedShade = shade ? shade.toString().trim().toLowerCase() : "";
+
   const response = await gsapi.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: "Profit!A2:C",
   });
 
   const rows = response.data.values || [];
-  const itemStr = item.toString().trim().toLowerCase();
-  const shadeStr = shade ? shade.toString().trim().toLowerCase() : "";
-  
+
+  // exact match first
   let matchedRow = rows.find((r: any) => {
     const rowItem = r[0]?.toString().trim().toLowerCase();
     const rowShade = r[1]?.toString().trim().toLowerCase();
-    return rowItem === itemStr && rowShade === shadeStr;
+    return rowItem === normalizedItem && rowShade === normalizedShade;
   });
+  
+  // fallback to item only
   if (!matchedRow) {
     matchedRow = rows.find((r: any) => {
       const rowItem = r[0]?.toString().trim().toLowerCase();
-      return rowItem === itemStr;
+      return rowItem === normalizedItem;
     });
   }
 
@@ -160,11 +159,10 @@ async function handleGetCustomer(gsapi: any, req: VercelRequest, res: VercelResp
   });
 
   const rows = response.data.values || [];
-  const phoneNormalized = phone.toString().replace(/[^0-9]/g, "");
-  
+  const phoneStr = phone.toString().trim();
   const matchedRow = rows.find((r: any) => {
-    const rowPhone = r[2]?.toString().replace(/[^0-9]/g, "");
-    return rowPhone === phoneNormalized;
+    const rowPhone = r[2]?.toString().trim();
+    return rowPhone === phoneStr;
   });
 
   if (!matchedRow) {
@@ -176,10 +174,11 @@ async function handleGetCustomer(gsapi: any, req: VercelRequest, res: VercelResp
       customerId: matchedRow[0] || "",
       name: matchedRow[1] || "",
       phone: matchedRow[2] || "",
-      phone2: matchedRow[3] || "",
-      points: Number(matchedRow[8] || 0),
-      totalSpend: Number(matchedRow[6] || 0),
-      totalBills: Number(matchedRow[7] || 0),
+      firstVisit: matchedRow[3] || "",
+      lastVisit: matchedRow[4] || "",
+      totalSpend: Number(matchedRow[5] || 0),
+      totalBills: Number(matchedRow[6] || 0),
+      points: Number(matchedRow[7] || 0),
     },
   });
 }
@@ -192,24 +191,20 @@ async function handleSearchCustomersByName(gsapi: any, req: VercelRequest, res: 
 
   const response = await gsapi.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Customers!A2:I",
+    range: "Customers!A2:H",
   });
-
   const rows = response.data.values || [];
-  const searchTerm = name.toLowerCase().trim();
-
-  const matches = rows
-    .filter((r: any) => r[1]?.toString().toLowerCase().includes(searchTerm))
-    .map((r: any) => ({
-      customerId: r[0] || "",
-      name: r[1] || "",
-      phone: r[2] || "",
-      phone2: r[3] || "",
-      points: Number(r[8] || 0),
-      totalSpend: Number(r[6] || 0),
-      totalBills: Number(r[7] || 0),
-    }));
-
+  const searchName = name.toString().trim().toLowerCase();
+  const matches = rows.filter((r: any) => {
+    const custName = r[1]?.toString().trim().toLowerCase();
+    return custName && custName.includes(searchName);
+  }).map((r: any) => ({
+    customerId: r[0] || "",
+    name: r[1] || "",
+    phone: r[2] || "",
+    phone2: r[3] || "",
+    points: Number(r[7]) || 0,
+  })).slice(0, 20);
   return res.status(200).json({ customers: matches });
 }
 
@@ -221,66 +216,22 @@ async function handleSearchCustomersById(gsapi: any, req: VercelRequest, res: Ve
 
   const response = await gsapi.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Customers!A2:I",
+    range: "Customers!A2:H",
   });
-
   const rows = response.data.values || [];
-  const searchId = customerId.toUpperCase().trim();
-
-  // find exact match by Customer ID
-  const matchedRow = rows.find((r: any) => r[0]?.toString().toUpperCase() === searchId);
-
-  if (!matchedRow) {
+  const matched = rows.find((r: any) => r[0]?.toString().trim() === customerId.toString().trim());
+  if (!matched) {
     return res.status(200).json({ customer: null });
   }
-
   return res.status(200).json({
     customer: {
-      customerId: matchedRow[0] || "",
-      name: matchedRow[1] || "",
-      phone: matchedRow[2] || "",
-      phone2: matchedRow[3] || "",
-      points: Number(matchedRow[8] || 0),
-      totalSpend: Number(matchedRow[6] || 0),
-      totalBills: Number(matchedRow[7] || 0),
-    },
-  });
-}
-
-async function handleGetDiscounts(gsapi: any, res: VercelResponse) {
-  const response = await gsapi.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: "Discounts!A2:C",
-  });
-
-  const slabs = (response.data.values || [])
-    .filter((row: any) => row[0] && row[2])
-    .map((row: any) => ({
-      minTotal: Number(row[0]),
-      maxTotal: row[1] ? Number(row[1]) : Infinity,
-      pct: Number(row[2]),
-    }))
-    .sort((a: any, b: any) => a.minTotal - b.minTotal);
-
-  return res.status(200).json({ slabs });
-}
-
-async function handleGetPointsConfig(gsapi: any, res: VercelResponse) {
-  const response = await gsapi.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: "PointsConfig!A2:C2",
-  });
-
-  const row = response.data.values?.[0];
-  if (!row || !row[0]) {
-    return res.status(200).json({ config: null });
-  }
-
-  return res.status(200).json({
-    config: {
-      earnRate: Number(row[0] || 0),
-      redeemRate: Number(row[1] || 0),
-      minRedeem: Number(row[2] || 0),
+      customerId: matched[0] || "",
+      name: matched[1] || "",
+      phone: matched[2] || "",
+      phone2: matched[3] || "",
+      totalSpend: Number(matched[5]) || 0,
+      totalBills: Number(matched[6]) || 0,
+      points: Number(matched[7]) || 0,
     },
   });
 }
