@@ -68,6 +68,7 @@ export default function App() {
   const [billSearchNo, setBillSearchNo] = useState("");
   const [retrievedBill, setRetrievedBill] = useState<any>(null);
   const [billRetrievalLoading, setBillRetrievalLoading] = useState(false);
+  const [amountReceived, setAmountReceived] = useState(0);
 
   // validate recovered bill prices against current prices
   const validateRecoveredPrices = async (recoveredItems: any[]) => {
@@ -801,6 +802,7 @@ export default function App() {
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
 
   const finalTotal = grandTotal + courierCharges;
+  const changeAmount = amountReceived > finalTotal ? amountReceived - finalTotal : 0;
 
   const captureBillImage = async (): Promise<Blob | null> => {
     const billEl = document.getElementById("print-bill");
@@ -1773,7 +1775,31 @@ export default function App() {
             <span>₹{finalTotal}</span>
           </div>
         </div>
-
+<div className="no-print" style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "16px", marginTop: "12px", fontFamily: "'Montserrat', sans-serif" }}>
+  <span style={{ fontSize: "13px", fontWeight: 600 }}>💰 Cash Received:</span>
+  <input
+    type="text"
+    inputMode="decimal"
+    value={amountReceived}
+    onChange={(e) => setAmountReceived(Number(e.target.value) || 0)}
+    placeholder="0"
+    style={{
+      width: "100px",
+      padding: "6px 10px",
+      fontSize: "13px",
+      border: "1px solid #cbd5e1",
+      borderRadius: "0px",
+      outline: "none",
+      textAlign: "right",
+      fontFamily: "'Montserrat', sans-serif",
+    }}
+  />
+  {changeAmount > 0 && (
+    <span style={{ fontSize: "13px", fontWeight: 700, color: "#10b981" }}>
+      💵 Change: ₹{changeAmount}
+    </span>
+  )}
+</div>
         <p style={styles.thankYou}>Thank you for your purchase!</p>
       </div>
 
@@ -1786,6 +1812,7 @@ export default function App() {
               setPhone("");
               setCustomer(null);
               setCourierCharges(0);
+              setAmountReceived(0);
             }}
             style={{
               flex: 1,
