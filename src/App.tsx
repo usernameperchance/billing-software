@@ -240,6 +240,10 @@ export default function App() {
   const [billDate] = useState(() => new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }));
   const [billTime, setBillTime] = useState(() => new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }));
 
+  const displayBillNo = editingBillNo ?? nextBillNo;
+  const displayBillDate = editingBillNo ? (originalBillDate || billDate) : billDate;
+  const displayBillTime = editingBillNo ? (originalBillTime || billTime) : billTime; 
+
   const normalizedPhone = phone.replace(/[^0-9]/g, "");
   const isPhoneValid = normalizedPhone.length === 10;
   // const customerMatchesPhone = !!customer && customer.phone.replace(/[^0-9]/g, "") === normalizedPhone;
@@ -734,7 +738,8 @@ const retrieveBillByNo = async (billNo: number) => {
 };
 
 const loadBillForEdit = (bill: any) => {
-  const loadedItems = bill.items.map((it: any) => recalcItem({ ...it, cost: it.cost || 0, originalPrice: it.price }));
+  const loadedItems = bill.items.map((it: any) => 
+  recalcItem({ ...it, cost: it.cost || 0, originalPrice: it.price }));
   updateItems(loadedItems);
   setCustomerName(bill.customerName);
   setPhone(bill.customerPhone);
@@ -835,9 +840,9 @@ const loadBillForEdit = (bill: any) => {
             <div style={{ fontSize: "11px", fontWeight: 600 }}><span style={styles.metaLabel}>Phone:</span> {phone || ""}</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: "flex-start" }}>
-            <div style={{ fontSize: "12px", fontWeight: 700 }}><span style={styles.metaLabel}>Bill No:</span> #{nextBillNo ?? ""}</div>
-            <div style={{ fontSize: "12px", fontWeight: 700 }}><span style={styles.metaLabel}>Date:</span> {billDate}</div>
-            <div style={{ fontSize: "12px", fontWeight: 700 }}><span style={styles.metaLabel}>Time:</span> {billTime}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700 }}><span style={styles.metaLabel}>Bill No:</span> #{displayBillNo ?? ""}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700 }}><span style={styles.metaLabel}>Date:</span> {displayBillDate}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700 }}><span style={styles.metaLabel}>Time:</span> {displayBillTime}</div>
           </div>
         </div>
         <table className="bill-table" style={styles.table}>
@@ -963,9 +968,9 @@ const loadBillForEdit = (bill: any) => {
               <div><span style={styles.metaLabel}>Phone:</span> {phone || ""}</div>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:"3px", alignItems:"flex-start" }}>
-              <div><span style={styles.metaLabel}>Bill No:</span> #{nextBillNo ?? ""}</div>
-              <div><span style={styles.metaLabel}>Date:</span> {billDate}</div>
-              <div><span style={styles.metaLabel}>Time:</span> {billTime}</div>
+              <div><span style={styles.metaLabel}>Bill No:</span> #{displayBillNo ?? ""}</div>
+              <div><span style={styles.metaLabel}>Date:</span> {displayBillDate}</div>
+              <div><span style={styles.metaLabel}>Time:</span> {displayBillTime}</div>
             </div>
           </div>
           <div style={{ fontSize:"9px", color:"#999", textAlign:"center", marginTop:"6px" }}>A4 Page Preview (210mm × 297mm)</div>
