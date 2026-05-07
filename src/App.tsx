@@ -289,25 +289,30 @@ export default function App() {
     showToast(`Customer selected: ${cust.name}`, "success");
   };
 
-  useEffect(() => { fetchNextBillNo(); }, []);
+  useEffect(() => { 
+    if (editingBillNo) return;
+    fetchNextBillNo(); }, [editingBillNo]);
   useEffect(() => {
+    if (editingBillNo) return;
     const interval = setInterval(() => fetchNextBillNo(), 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [editingBillNo]);
   useEffect(() => {
+    if (editingBillNo) return;
     const interval = setInterval(() => {
       setBillTime(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }));
     }, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [editingBillNo]);
   useEffect(() => {
     const handleFocus = () => {
+      if (editingBillNo) return;
       fetchNextBillNo();
       setBillTime(new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true }));
     };
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, []);
+  }, [editingBillNo]);
   useEffect(() => {
     const cached = sessionStorage.getItem("allItems");
     if (cached) { setAllItems(JSON.parse(cached)); return; }
@@ -733,12 +738,12 @@ const loadBillForEdit = (bill: any) => {
   updateItems(loadedItems);
   setCustomerName(bill.customerName);
   setPhone(bill.customerPhone);
-  setCourierCharges(bill.courierCharges);
+  setCourierCharges(bill.courierCharges || null);
   setEditingBillNo(bill.billNo);
   setOriginalBillDate(bill.date);
   setOriginalBillTime(bill.time);
   setCustomer(null);
-  setOriginalRowIndexes(bill.originalRowIndexes); // need state variable
+  setOriginalRowIndexes(bill.originalRowIndexes);
   setShowBillRetrieval(false);
   showToast("Bill loaded. Edit and re-save.", "success");
 };
