@@ -71,6 +71,7 @@ export default function App() {
   const [originalBillDate, setOriginalBillDate] = useState("");
   const [originalBillTime, setOriginalBillTime] = useState("");
   const [originalRowIndexes, setOriginalRowIndexes] = useState<number[]>([]); 
+  const [amountReceived, setAmountReceived] = useState(0);
 
   // helper: recalc single item totals/profit live
   const recalcItem = (i: BillItem): BillItem => {
@@ -106,6 +107,7 @@ export default function App() {
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
   const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
   const finalTotal = grandTotal + courierCharges;
+  const changeAmount = amountReceived > finalTotal ? amountReceived - finalTotal : 0;
 
   const validateRecoveredPrices = async (recoveredItems: any[]) => {
     const changes: string[] = [];
@@ -895,12 +897,37 @@ const loadBillForEdit = (bill: any) => {
           {courierCharges > 0 && <div style={{ ...styles.discountRow, display:"flex", justifyContent:"space-between", paddingRight:"8px", color:"#dc2626" }}><span>Courier Charges</span><span>+ ₹{courierCharges}</span></div>}
           <div style={{ ...styles.grandTotalRow, display:"flex", justifyContent:"space-between" }}><span>Grand Total</span><span>₹{finalTotal}</span></div>
         </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "16px", marginTop: "12px", fontFamily: "'Montserrat', sans-serif" }}>
+  <span style={{ fontSize: "13px", fontWeight: 600 }}>💰 Cash Received:</span>
+  <input
+    type="text"
+    inputMode="decimal"
+    value={amountReceived}
+    onChange={(e) => setAmountReceived(Number(e.target.value) || 0)}
+    placeholder="0"
+    style={{
+      width: "100px",
+      padding: "6px 10px",
+      fontSize: "13px",
+      border: "1px solid #cbd5e1",
+      borderRadius: "0px",
+      outline: "none",
+      textAlign: "right",
+      fontFamily: "'Montserrat', sans-serif",
+    }}
+  />
+  {changeAmount > 0 && (
+    <span style={{ fontSize: "13px", fontWeight: 700, color: "#10b981" }}>
+      💵 Change: ₹{changeAmount}
+    </span>
+  )}
+</div>
         <p style={styles.thankYou}>Thank you for your purchase!</p>
       </div>
 
       <div className="no-print" style={styles.customerCard}>
         <div style={{ display:"flex", gap:"8px", marginBottom:"12px" }}>
-          <button onClick={()=>{ setCustomerType("walk-in"); setCustomerName(""); setPhone(""); setCustomer(null); setCourierCharges(0); }} style={{ flex:1, padding:"8px12px", fontSize:"13px", fontWeight:customerType==="walk-in"?700:500, backgroundColor:customerType==="walk-in"?"#10b981":"#e5e7eb", color:customerType==="walk-in"?"#fff":"#374151", border:"none", borderRadius:"4px", cursor:"pointer" }}>👤 Walk-in</button>
+          <button onClick={()=>{ setCustomerType("walk-in"); setCustomerName(""); setPhone(""); setCustomer(null); setCourierCharges(0); setAmountReceived(0); }} style={{ flex:1, padding:"8px12px", fontSize:"13px", fontWeight:customerType==="walk-in"?700:500, backgroundColor:customerType==="walk-in"?"#10b981":"#e5e7eb", color:customerType==="walk-in"?"#fff":"#374151", border:"none", borderRadius:"4px", cursor:"pointer" }}>👤 Walk-in</button>
           <button onClick={()=>{ setCustomerType("courier"); setCustomerName(""); setPhone(""); setCustomer(null); }} style={{ flex:1, padding:"8px12px", fontSize:"13px", fontWeight:customerType==="courier"?700:500, backgroundColor:customerType==="courier"?"#3b82f6":"#e5e7eb", color:customerType==="courier"?"#fff":"#374151", border:"none", borderRadius:"4px", cursor:"pointer" }}>🚚 Courier</button>
         </div>
         <div style={{ display:"flex", gap:"12px", flexWrap:"wrap", alignItems:"center" }}>
