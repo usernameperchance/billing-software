@@ -70,6 +70,7 @@ export default function App() {
   const [editingBillNo, setEditingBillNo] = useState<number | null>(null);
   const [originalBillDate, setOriginalBillDate] = useState("");
   const [originalBillTime, setOriginalBillTime] = useState("");
+  const [originalRowIndexes, setOriginalRowIndexes] = useState<number[]>([]); 
 
   // helper: recalc single item totals/profit live
   const recalcItem = (i: BillItem): BillItem => {
@@ -577,60 +578,62 @@ export default function App() {
     img.src = svgUrl;
   });
 
-  const saveBill = async () => {
-    if (items.length === 0 || saving) return false;
-    if (!isPhoneValid) { alert("Enter 10-digit customer phone"); return false; }
-    if (customerType === "courier" && courierCharges <= 0) {
-      alert("Courier charges required for courier orders");
-      return false;
+const saveBill = async () => {
+  if (items.length === 0 || saving) return false;
+  if (!isPhoneValid) { alert("Enter 10-digit customer phone"); return false; }
+  if (customerType === "courier" && courierCharges <= 0) {
+    alert("Courier charges required for courier orders");
+    return false;
+  }
+  setSaving(true);
+  setSavingProgress(true);
+  try {
+    const url = editingBillNo ? "/api/bill?action=edit" : "/api/bill";
+    const body: any = {
+      items: items.map(i => ({ ...i, total: i.qty * i.price, profit: i.profit })),
+      finalTotal,
+      courierCharges,
+      customer: { name: customerName, phone, type: customerType, courier: customerType === "courier" },
+      earnRate: pointsConfig?.earnRate ?? 0,
+      redeemRate: pointsConfig?.redeemRate ?? 0,
+    };
+    if (editingBillNo) {
+      body.originalBillNo = editingBillNo;
+      body.originalDate = originalBillDate;
+      body.originalTime = originalBillTime;
+      body.originalRowIndexes = originalRowIndexes; // pass the stored row indexes
     }
-    setSaving(true);
-    setSavingProgress(true);
-    try {
-      const url = editingBillNo ? "/api/bill?action=edit" : "/api/bill";
-      const body: any = {
-        items: items.map(i => ({ ...i, total: i.qty * i.price, profit: i.profit })),
-        finalTotal,
-        courierCharges,
-        customer: { name: customerName, phone, type: customerType, courier: customerType === "courier" },
-        earnRate: pointsConfig?.earnRate ?? 0,
-        redeemRate: pointsConfig?.redeemRate ?? 0,
-      };
-      if (editingBillNo) {
-        body.originalBillNo = editingBillNo;
-        body.originalDate = originalBillDate;
-        body.originalTime = originalBillTime;
-      }
-      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Save failed");
-      priceCache.current = {};
-      shadeCache.current = {};
-      sessionStorage.removeItem("allItems");
-      localStorage.removeItem("billDraft");
-      fetchNextBillNo();
-      setItems([]);
-      setItem("");
-      setShade("");
-      setSelectedRow(null);
-      setCustomer(null);
-      setCustomerName("");
-      setPhone("");
-      setRedeemPoints(false);
-      setCourierCharges(0);
-      setEditingBillNo(null);
-      setOriginalBillDate("");
-      setOriginalBillTime("");
-      showToast(`Bill #${nextBillNo} saved!`, "success");
-      return true;
-    } catch (err: any) {
-      showToast(err.message, "error");
-      return false;
-    } finally {
-      setSaving(false);
-      setSavingProgress(false);
-    }
-  };
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Save failed");
+    priceCache.current = {};
+    shadeCache.current = {};
+    sessionStorage.removeItem("allItems");
+    localStorage.removeItem("billDraft");
+    fetchNextBillNo();
+    setItems([]);
+    setItem("");
+    setShade("");
+    setSelectedRow(null);
+    setCustomer(null);
+    setCustomerName("");
+    setPhone("");
+    setRedeemPoints(false);
+    setCourierCharges(0);
+    setEditingBillNo(null);
+    setOriginalBillDate("");
+    setOriginalBillTime("");
+    setOriginalRowIndexes([]);
+    showToast(`Bill #${nextBillNo} saved!`, "success");
+    return true;
+  } catch (err: any) {
+    showToast(err.message, "error");
+    return false;
+  } finally {
+    setSaving(false);
+    setSavingProgress(false);
+  }
+};
 
   const sendWhatsAppWithBlob = async (blob: Blob) => {
     const cleaned = phone.replace(/[^0-9]/g, "");
@@ -712,33 +715,33 @@ export default function App() {
     } catch (err: any) { alert(err.message); } finally { setRestockLoading(false); }
   };
 
-  const retrieveBillByNo = async (billNo: number) => {
-    if (!billNo || billNo <= 0) { showToast("Enter valid bill number", "error"); return; }
-    setBillRetrievalLoading(true);
-    try {
-      const res = await fetch(`/api/bill?action=getBill&billNo=${billNo}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setRetrievedBill(data.bill);
-      showToast(`Bill #${billNo} retrieved`, "success");
-    } catch (err: any) { showToast(err.message, "error"); setRetrievedBill(null); }
-    finally { setBillRetrievalLoading(false); }
-  };
+const retrieveBillByNo = async (billNo: number) => {
+  if (!billNo || billNo <= 0) { showToast("Enter valid bill number", "error"); return; }
+  setBillRetrievalLoading(true);
+  try {
+    const res = await fetch(`/api/bill?action=getBill&billNo=${billNo}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    setRetrievedBill({ ...data.bill, originalRowIndexes: data.bill.originalRowIndexes });
+    showToast(`Bill #${billNo} retrieved`, "success");
+  } catch (err: any) { showToast(err.message, "error"); setRetrievedBill(null); }
+  finally { setBillRetrievalLoading(false); }
+};
 
-  const loadBillForEdit = (bill: any) => {
-    // ensure each item has proper fields, recalc totals live
-    const loadedItems = bill.items.map((it: any) => recalcItem({ ...it, cost: it.cost || 0, originalPrice: it.price }));
-    updateItems(loadedItems);
-    setCustomerName(bill.customerName);
-    setPhone(bill.customerPhone);
-    setCourierCharges(bill.courierCharges);
-    setEditingBillNo(bill.billNo);
-    setOriginalBillDate(bill.date);
-    setOriginalBillTime(bill.time);
-    setCustomer(null);
-    setShowBillRetrieval(false);
-    showToast("Bill loaded. Edit and re-save.", "success");
-  };
+const loadBillForEdit = (bill: any) => {
+  const loadedItems = bill.items.map((it: any) => recalcItem({ ...it, cost: it.cost || 0, originalPrice: it.price }));
+  updateItems(loadedItems);
+  setCustomerName(bill.customerName);
+  setPhone(bill.customerPhone);
+  setCourierCharges(bill.courierCharges);
+  setEditingBillNo(bill.billNo);
+  setOriginalBillDate(bill.date);
+  setOriginalBillTime(bill.time);
+  setCustomer(null);
+  setOriginalRowIndexes(bill.originalRowIndexes); // need state variable
+  setShowBillRetrieval(false);
+  showToast("Bill loaded. Edit and re-save.", "success");
+};
 
   return (
     <div className="app-container" style={styles.container}>

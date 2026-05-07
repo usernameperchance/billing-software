@@ -53,13 +53,9 @@ async function ensureBillSheetColumns(gsapi: any) {
     fields: "sheets.properties(title,gridProperties,sheetId)",
   });
   const billSheet = (sheetMeta.data.sheets || []).find((s: any) => s.properties?.title === "Bill");
-  if (!billSheet) {
-    console.error("Bill sheet not found");
-    return;
-  }
-  let currentCols = billSheet.properties?.gridProperties?.columnCount || 0;
-  const needsHeaders: string[] = [];
-  if (currentCols < 14) {
+  if (!billSheet) return;
+  const currentCols = billSheet.properties?.gridProperties?.columnCount || 0;
+  if (currentCols < 13) {
     await gsapi.spreadsheets.batchUpdate({
       spreadsheetId: STORE_SHEET_ID,
       requestBody: {
@@ -67,7 +63,7 @@ async function ensureBillSheetColumns(gsapi: any) {
           updateSheetProperties: {
             properties: {
               sheetId: billSheet.properties?.sheetId,
-              gridProperties: { columnCount: 14 }
+              gridProperties: { columnCount: 13 }
             },
             fields: "gridProperties.columnCount"
           }
@@ -79,17 +75,13 @@ async function ensureBillSheetColumns(gsapi: any) {
       range: "Bill!1:1",
     });
     const headers = headerRow.data.values?.[0] || [];
-    if (headers.length < 14) {
-      if (!headers[12]) needsHeaders.push("Last Updated");
-      if (!headers[13]) needsHeaders.push("Status");
-      for (let i = 0; i < needsHeaders.length; i++) {
-        await gsapi.spreadsheets.values.update({
-          spreadsheetId: STORE_SHEET_ID,
-          range: `Bill!${String.fromCharCode(65 + 12 + i)}1`,
-          valueInputOption: "USER_ENTERED",
-          requestBody: { values: [[needsHeaders[i]]] }
-        });
-      }
+    if (headers.length < 13 && !headers[12]) {
+      await gsapi.spreadsheets.values.update({
+        spreadsheetId: STORE_SHEET_ID,
+        range: "Bill!M1",
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [["Last Updated"]] }
+      });
     }
   }
 }
@@ -246,7 +238,7 @@ async function validateAllItemsStock(
           loftPackets,
           packetSize,
           isValid: false,
-          errorMessage: `Insufficient stock for ${item} Shade / Type: ${shade}. Required: ${qty}, Available: ${totalAvailable}`,
+          errorMessage: `insufficient stock for ${item} ${shade}. need ${qty}, have ${totalAvailable}`,
         });
       } else {
         validations.push({
@@ -274,7 +266,7 @@ async function validateAllItemsStock(
         loftPackets: 0,
         packetSize: 0,
         isValid: false,
-        errorMessage: `Error checking stock for ${item}: ${err.message}`,
+        errorMessage: `error checking stock for ${item}: ${err.message}`,
       });
     }
   }
@@ -299,26 +291,26 @@ async function deductAllItemsStock(
   gsapi: any,
   operations: StockDeductionOp[]
 ): Promise<Map<string, any>> {
-  const appliedOperations = new Map<string, any>();
+  const applied = new Map<string, any>();
 
   for (const op of operations) {
     const { item, shade, storeRowIndex, storeStock, loftRowIndex, loftIndividuals, loftPackets, packetSize, qty, timestamp } = op;
 
     try {
       let remaining = qty;
-      let usedFromStore = 0;
-      let usedFromLoft = 0;
+      let usedStore = 0;
+      let usedLoft = 0;
 
       if (storeRowIndex !== -1) {
-        usedFromStore = Math.min(remaining, storeStock);
-        const newStoreStock = storeStock - usedFromStore;
-        remaining -= usedFromStore;
+        usedStore = Math.min(remaining, storeStock);
+        const newStore = storeStock - usedStore;
+        remaining -= usedStore;
 
         await gsapi.spreadsheets.values.update({
           spreadsheetId: STORE_SHEET_ID,
           range: `${escapeSheetName(item)}!C${storeRowIndex + 2}`,
           valueInputOption: "USER_ENTERED",
-          requestBody: { values: [[newStoreStock]] },
+          requestBody: { values: [[newStore]] },
         });
         await gsapi.spreadsheets.values.update({
           spreadsheetId: STORE_SHEET_ID,
@@ -327,62 +319,90 @@ async function deductAllItemsStock(
           requestBody: { values: [[timestamp]] },
         });
 
-        appliedOperations.set(`${item}|${shade}|store`, {
-          item,
-          shade,
-          storeRowIndex,
-          oldStoreStock: storeStock,
-          newStoreStock,
+        applied.set(`${item}|${shade}|store`, {
+          item, shade, storeRowIndex, oldStore: storeStock, newStore,
         });
       }
 
       if (remaining > 0 && loftRowIndex !== -1) {
-        const usedIndiv = Math.min(remaining, loftIndividuals);
-        let newIndividuals = loftIndividuals - usedIndiv;
+        const useIndiv = Math.min(remaining, loftIndividuals);
+        let newIndiv = loftIndividuals - useIndiv;
         let newPackets = loftPackets;
-        remaining -= usedIndiv;
+        remaining -= useIndiv;
 
         if (remaining > 0) {
-          const packetsNeeded = Math.ceil(remaining / packetSize);
-          const packetsToOpen = Math.min(packetsNeeded, loftPackets);
-          const ballsFromPackets = packetsToOpen * packetSize;
-          newPackets = loftPackets - packetsToOpen;
-          newIndividuals += ballsFromPackets - remaining;
+          const needPackets = Math.ceil(remaining / packetSize);
+          const openPackets = Math.min(needPackets, loftPackets);
+          const ballsFromPackets = openPackets * packetSize;
+          newPackets = loftPackets - openPackets;
+          newIndiv += ballsFromPackets - remaining;
           remaining = 0;
         }
 
-        usedFromLoft = qty - usedFromStore;
+        usedLoft = qty - usedStore;
         await gsapi.spreadsheets.values.update({
           spreadsheetId: LOFT_SHEET_ID,
           range: `${escapeSheetName(item)}!E${loftRowIndex + 2}:F${loftRowIndex + 2}`,
           valueInputOption: "USER_ENTERED",
-          requestBody: { values: [[newIndividuals, newPackets]] },
+          requestBody: { values: [[newIndiv, newPackets]] },
         });
 
-        appliedOperations.set(`${item}|${shade}|loft`, {
-          item,
-          shade,
-          loftRowIndex,
-          oldIndividuals: loftIndividuals,
-          oldPackets: loftPackets,
-          newIndividuals,
-          newPackets,
+        applied.set(`${item}|${shade}|loft`, {
+          item, shade, loftRowIndex, oldIndiv: loftIndividuals, oldPackets: loftPackets, newIndiv, newPackets,
         });
       }
 
-      if (usedFromLoft > 0) {
-        appliedOperations.set(`${item}|${shade}|loftLog`, {
-          item,
-          shade,
-          usedFromLoft,
-        });
+      if (usedLoft > 0) {
+        applied.set(`${item}|${shade}|loftLog`, { item, shade, usedLoft });
       }
     } catch (err) {
-      throw new Error(`Failed to deduct stock for ${item} ${shade}: ${(err as any).message}`);
+      throw new Error(`stock deduction failed for ${item} ${shade}: ${(err as any).message}`);
     }
   }
 
-  return appliedOperations;
+  return applied;
+}
+
+// helpers for edit flow
+async function getBillRowsWithIndexes(gsapi: any, billNo: number): Promise<{ rows: any[], rowIndexes: number[] }> {
+  const res = await gsapi.spreadsheets.values.get({
+    spreadsheetId: STORE_SHEET_ID,
+    range: "Bill!A:M",
+  });
+  const allRows = res.data.values || [];
+  const rows: any[] = [];
+  const rowIndexes: number[] = [];
+  for (let i = 0; i < allRows.length; i++) {
+    const row = allRows[i];
+    const bn = Number(row[0]);
+    if (bn === billNo && row[1] && row[1].toString().trim()) {
+      rows.push(row);
+      rowIndexes.push(i + 1);
+    }
+  }
+  return { rows, rowIndexes };
+}
+
+async function deleteBillRows(gsapi: any, sheetId: number, rowIndexes: number[]) {
+  if (rowIndexes.length === 0) return;
+  const sorted = [...rowIndexes].sort((a,b) => b - a);
+  const requests = [];
+  for (const idx of sorted) {
+    requests.push({
+      deleteDimension: {
+        range: {
+          sheetId: sheetId,
+          dimension: "ROWS",
+          startIndex: idx - 1,
+          endIndex: idx,
+        },
+      },
+    });
+  }
+  await gsapi.spreadsheets.batchUpdate({
+    spreadsheetId: STORE_SHEET_ID,
+    requestBody: { requests },
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -392,52 +412,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === "GET") {
       const action = req.query.action as string;
-      
+
       if (action === "getBill") {
         const billNo = Number(req.query.billNo);
         if (!billNo || billNo <= 0) {
-          return res.status(400).json({ error: "Invalid bill number" });
+          return res.status(400).json({ error: "invalid bill number" });
         }
-        
-        const billSheet = await gsapi.spreadsheets.values.get({
-          spreadsheetId: STORE_SHEET_ID,
-          range: "Bill!A:N",
-        });
-        const allRows = billSheet.data.values || [];
-        // filter active rows for this bill number
-        const activeRows = allRows.filter((row: any) => {
-          const effectiveBillNo = Number(row[0]);
-          const status = row[13]?.toString().toUpperCase();
-          return effectiveBillNo === billNo && row[1] && (!status || status === "ACTIVE");
-        });
-        
-        if (activeRows.length === 0) {
-          return res.status(404).json({ error: "Bill not found" });
+
+        const { rows, rowIndexes } = await getBillRowsWithIndexes(gsapi, billNo);
+        if (rows.length === 0) {
+          return res.status(404).json({ error: "bill not found" });
         }
-        
-        const firstRow = activeRows[0];
-        const customerId = firstRow[11];
-        const date = firstRow[6];
-        const time = firstRow[7];
-        const courierCharges = Number(firstRow[9]) || 0;
-        const finalTotal = Number(firstRow[10]) || 0;
-        
+
+        const first = rows[0];
+        const customerId = first[11];
+        const date = first[6];
+        const time = first[7];
+        const courier = Number(first[9]) || 0;
+        const finalTotal = Number(first[10]) || 0;
+
         let customerName = "Unknown";
         let customerPhone = "";
         if (customerId) {
-          const custSheet = await gsapi.spreadsheets.values.get({
+          const custRes = await gsapi.spreadsheets.values.get({
             spreadsheetId: STORE_SHEET_ID,
             range: "Customers!A:C",
           });
-          const custRows = custSheet.data.values || [];
+          const custRows = custRes.data.values || [];
           const custRow = custRows.find((r: any) => r[0] === customerId);
           if (custRow) {
             customerName = custRow[1] || "Unknown";
             customerPhone = custRow[2] || "";
           }
         }
-        
-        const items = activeRows.map((row: any) => ({
+
+        const items = rows.map((row: any) => ({
           item: row[1],
           shade: row[2],
           qty: Number(row[3]) || 0,
@@ -446,35 +455,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           profit: Number(row[8]) || 0,
           cost: 0,
         }));
-        
+
         return res.status(200).json({
           bill: {
             billNo,
             items,
+            customerId,
             customerName,
             customerPhone,
-            customerId,
             date,
             time,
+            courierCharges: courier,
             finalTotal,
-            courierCharges,
+            lastUpdated: first[12] || "",
+            originalRowIndexes: rowIndexes,
           },
         });
       }
-      
+
       const billSheet = await gsapi.spreadsheets.values.get({
         spreadsheetId: STORE_SHEET_ID,
         range: "Bill!A:A",
       });
-      const allValues = billSheet.data.values?.flat().filter(v => v) || [];
-      const billNumbers = allValues.map(Number).filter(n => !isNaN(n) && n > 0);
-      const lastBillNo = billNumbers.length > 0 ? Math.max(...billNumbers) : 0;
-      return res.status(200).json({ billNo: lastBillNo });
+      const all = billSheet.data.values?.flat().filter(v => v) || [];
+      const nums = all.map(Number).filter(n => !isNaN(n) && n > 0);
+      const last = nums.length ? Math.max(...nums) : 0;
+      return res.status(200).json({ billNo: last });
     }
 
     if (req.method === "POST") {
       const { action } = req.query;
-      
+
       if (action === "edit") {
         const {
           originalBillNo,
@@ -486,51 +497,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           redeemRate,
           originalDate,
           originalTime,
+          originalRowIndexes,
         } = req.body;
 
         if (!originalBillNo || !items || !Array.isArray(items)) {
-          return res.status(400).json({ error: "Invalid edit request" });
+          return res.status(400).json({ error: "invalid edit request" });
         }
 
         const { date, time } = getISTDateTime();
         const timestamp = `${date} ${time}`;
 
-        const billSheet = await gsapi.spreadsheets.values.get({
+        const sheetMeta = await gsapi.spreadsheets.get({
           spreadsheetId: STORE_SHEET_ID,
-          range: "Bill!A:N",
+          fields: "sheets.properties(sheetId,title)",
         });
-        const allRows = billSheet.data.values || [];
-        const originalRowsWithPos = allRows.reduce((acc, row, idx) => {
-          const billNo = Number(row[0]);
-          const status = row[13]?.toString().toUpperCase();
-          if (billNo === originalBillNo && row[1] && (!status || status === "ACTIVE")) {
-            acc.push({ row, rowNumber: idx + 1 });
-          }
-          return acc;
-        }, [] as { row: any[], rowNumber: number }[]);
-
-        if (originalRowsWithPos.length === 0) {
-          return res.status(404).json({ error: "Original bill not found" });
+        const billSheetObj = (sheetMeta.data.sheets || []).find((s: any) => s.properties?.title === "Bill");
+        if (!billSheetObj) {
+          return res.status(500).json({ error: "bill sheet not found" });
+        }
+        const sheetId = billSheetObj.properties?.sheetId;
+        if (!sheetId || typeof sheetId !== 'number') {
+          return res.status(500).json({ error: "invalid sheet id" });
         }
 
-        // mark old rows as EDITED
-        for (const { rowNumber } of originalRowsWithPos) {
-          await gsapi.spreadsheets.values.update({
-            spreadsheetId: STORE_SHEET_ID,
-            range: `Bill!N${rowNumber}`,
-            valueInputOption: "USER_ENTERED",
-            requestBody: { values: [["EDITED"]] },
-          });
+        const { rows: oldRows, rowIndexes: oldIndexes } = await getBillRowsWithIndexes(gsapi, originalBillNo);
+        if (oldRows.length === 0 && (!originalRowIndexes || originalRowIndexes.length === 0)) {
+          return res.status(404).json({ error: "original bill rows not found" });
         }
 
-        // restore store stock and loft stock from old rows
-        for (const { row } of originalRowsWithPos) {
+        const indexesToDelete = originalRowIndexes && originalRowIndexes.length ? originalRowIndexes : oldIndexes;
+        if (!indexesToDelete.length) {
+          return res.status(400).json({ error: "no rows to delete" });
+        }
+
+        // reverse old stock
+        for (const row of oldRows) {
           const itemName = row[1];
           const shadeName = row[2];
           const qty = Number(row[3]) || 0;
           if (!itemName || !shadeName || qty === 0) continue;
 
-          // restore store
           const storeRes = await gsapi.spreadsheets.values.get({
             spreadsheetId: STORE_SHEET_ID,
             range: `${escapeSheetName(itemName)}!B2:C`,
@@ -538,16 +544,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const storeRows = storeRes.data.values || [];
           const storeIdx = storeRows.findIndex(r => r[0]?.toString().trim().toLowerCase() === shadeName.toLowerCase());
           if (storeIdx !== -1) {
-            const currentStock = Number(storeRows[storeIdx][1]) || 0;
+            const curr = Number(storeRows[storeIdx][1]) || 0;
             await gsapi.spreadsheets.values.update({
               spreadsheetId: STORE_SHEET_ID,
               range: `${escapeSheetName(itemName)}!C${storeIdx + 2}`,
               valueInputOption: "USER_ENTERED",
-              requestBody: { values: [[currentStock + qty]] },
+              requestBody: { values: [[curr + qty]] },
             });
           }
 
-          // restore loft (individuals + packets)
           const loftRes = await gsapi.spreadsheets.values.get({
             spreadsheetId: LOFT_SHEET_ID,
             range: `${escapeSheetName(itemName)}!A2:L`,
@@ -555,52 +560,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const loftRows = loftRes.data.values || [];
           const loftIdx = loftRows.findIndex(r => r[0]?.toString().trim().toLowerCase() === shadeName.toLowerCase());
           if (loftIdx !== -1) {
-            const currentIndiv = Number(loftRows[loftIdx][4]) || 0;
-            const currentPackets = Number(loftRows[loftIdx][5]) || 0;
+            const currIndiv = Number(loftRows[loftIdx][4]) || 0;
+            const currPackets = Number(loftRows[loftIdx][5]) || 0;
             await gsapi.spreadsheets.values.update({
               spreadsheetId: LOFT_SHEET_ID,
               range: `${escapeSheetName(itemName)}!E${loftIdx + 2}:F${loftIdx + 2}`,
               valueInputOption: "USER_ENTERED",
-              requestBody: { values: [[currentIndiv + qty, currentPackets]] },
+              requestBody: { values: [[currIndiv + qty, currPackets]] },
             });
           }
         }
 
-        // reverse customer spend/bills/points
-        const firstOrig = originalRowsWithPos[0].row;
-        const origCustomerId = firstOrig[11];
-        if (origCustomerId) {
+        const firstOld = oldRows[0];
+        const oldCustomerId = firstOld ? firstOld[11] : null;
+        if (oldCustomerId) {
           const custRes = await gsapi.spreadsheets.values.get({
             spreadsheetId: STORE_SHEET_ID,
             range: "Customers!A:I",
           });
           const custRows = custRes.data.values || [];
-          const custIdx = custRows.findIndex(r => r[0] === origCustomerId);
+          const custIdx = custRows.findIndex(r => r[0] === oldCustomerId);
           if (custIdx !== -1) {
             const existing = custRows[custIdx];
             const oldSpend = Number(existing[6]) || 0;
             const oldBills = Number(existing[7]) || 0;
             const oldPoints = Number(existing[8]) || 0;
-            const origFinalTotal = Number(firstOrig[10]) || 0;
+            const oldFinalTotal = Number(firstOld[10]) || 0;
             await gsapi.spreadsheets.values.update({
               spreadsheetId: STORE_SHEET_ID,
               range: `Customers!G${custIdx + 2}:I${custIdx + 2}`,
               valueInputOption: "USER_ENTERED",
               requestBody: {
-                values: [[oldSpend - origFinalTotal, oldBills - 1, oldPoints]],
+                values: [[oldSpend - oldFinalTotal, oldBills - 1, oldPoints]],
               },
             });
           }
         }
 
-        // validate new items
+        await deleteBillRows(gsapi, sheetId, indexesToDelete);
+
+        // validate new items stock
         const validations = await validateAllItemsStock(gsapi, items);
         const failed = validations.find(v => !v.isValid);
         if (failed) {
           return res.status(400).json({ error: failed.errorMessage });
         }
 
-        // deduct new stock
         const ops = validations
           .filter(v => !items.find(i => i.item === v.item && i.shade === v.shade)?.misc)
           .map(v => ({
@@ -617,7 +622,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }));
         await deductAllItemsStock(gsapi, ops);
 
-        // customer upsert
         let newCustomerId = "";
         try {
           const custRes = await gsapi.spreadsheets.values.get({
@@ -685,13 +689,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
           }
         } catch (err) {
-          console.error("Customer upsert failed in edit:", err);
+          console.error("customer upsert failed in edit:", err);
           newCustomerId = `TEMP-${customer.phone.replace(/[^0-9]/g, "")}`;
         }
 
         await ensureBillSheetColumns(gsapi);
 
-        const newBillValues = items.map((entry: any) => [
+        const profitSheet = await gsapi.spreadsheets.values.get({
+          spreadsheetId: STORE_SHEET_ID,
+          range: "Profit!A2:C",
+        });
+        const profitRows = profitSheet.data.values || [];
+        const costMap = new Map<string, number>();
+        for (const row of profitRows) {
+          const profitItem = row[0]?.toString().trim().toLowerCase();
+          const profitShade = row[1]?.toString().trim().toLowerCase();
+          const cost = Number(row[2]) || 0;
+          if (profitItem) {
+            const key = `${profitItem}|${profitShade || ""}`;
+            costMap.set(key, cost);
+          }
+        }
+
+        const enhancedItems = items.map((entry: any) => {
+          const itemKey = `${entry.item.toLowerCase()}|${entry.shade?.toLowerCase() || ""}`;
+          let costPrice = costMap.get(itemKey) || 0;
+          if (costPrice === 0) {
+            const fallback = `${entry.item.toLowerCase()}|`;
+            costPrice = costMap.get(fallback) || 0;
+          }
+          const qtyNum = Number(entry.qty) || 0;
+          const priceNum = Number(entry.price) || 0;
+          const total = qtyNum * priceNum;
+          const profit = total - (costPrice * qtyNum);
+          return { ...entry, total, profit, cost: costPrice };
+        });
+
+        const newRows = enhancedItems.map((entry: any) => [
           originalBillNo,
           entry.item,
           entry.shade,
@@ -705,20 +739,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           finalTotal,
           newCustomerId,
           timestamp,
-          "ACTIVE",
         ]);
 
         await gsapi.spreadsheets.values.append({
           spreadsheetId: STORE_SHEET_ID,
-          range: "Bill!A:N",
+          range: "Bill!A:M",
           valueInputOption: "USER_ENTERED",
-          requestBody: { values: newBillValues },
+          requestBody: { values: newRows },
         });
 
         return res.status(200).json({ success: true, billNo: originalBillNo });
       }
 
-      // normal POST new bill
+      // normal new bill
       const {
         items,
         finalTotal = 0,
@@ -728,21 +761,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } = req.body;
 
       if (!items || !Array.isArray(items)) {
-        return res.status(400).json({ error: "Invalid items" });
+        return res.status(400).json({ error: "invalid items" });
       }
-
       if (items.length === 0) {
-        return res.status(400).json({ error: "Bill must contain at least one item" });
+        return res.status(400).json({ error: "bill must have items" });
       }
-
       if (!customer?.phone || customer.phone.replace(/[^0-9]/g, "").length < 10) {
-        return res.status(400).json({ error: "Customer phone number is required (10 digits)" });
+        return res.status(400).json({ error: "customer phone required (10 digits)" });
       }
-
-      // courier validation
-      const isCourier = customer.type === "courier" || (customer.courier === true);
+      const isCourier = customer.type === "courier" || customer.courier === true;
       if (isCourier && courierCharges <= 0) {
-        return res.status(400).json({ error: "Courier charges must be greater than 0 for courier orders" });
+        return res.status(400).json({ error: "courier charges required for courier orders" });
       }
 
       const { date, time } = getISTDateTime();
@@ -752,21 +781,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         spreadsheetId: STORE_SHEET_ID,
         range: "Bill!A:A",
       });
-      const allValues = billSheet.data.values?.flat().filter(v => v) || [];
-      const billNumbers = allValues.map(Number).filter(n => !isNaN(n) && n > 0);
-      const lastBillNo = billNumbers.length > 0 ? Math.max(...billNumbers) : 0;
+      const all = billSheet.data.values?.flat().filter(v => v) || [];
+      const nums = all.map(Number).filter(n => !isNaN(n) && n > 0);
+      const lastBillNo = nums.length ? Math.max(...nums) : 0;
       const billNo = lastBillNo + 1;
 
       await ensureBillSheetColumns(gsapi);
 
       const validations = await validateAllItemsStock(gsapi, items);
-      const failedValidation = validations.find(v => !v.isValid);
-      if (failedValidation) {
-        return res.status(400).json({ error: failedValidation.errorMessage });
+      const failed = validations.find(v => !v.isValid);
+      if (failed) {
+        return res.status(400).json({ error: failed.errorMessage });
       }
 
-      const deductionOps = validations
-        .filter(v => !items[items.findIndex(i => i.item === v.item && i.shade === v.shade)]?.misc)
+      const ops = validations
+        .filter(v => !items.find(i => i.item === v.item && i.shade === v.shade)?.misc)
         .map(v => ({
           item: v.item,
           shade: v.shade,
@@ -780,29 +809,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           timestamp,
         }));
 
-      let appliedOps: Map<string, any> = new Map();
+      let applied = new Map();
       try {
-        appliedOps = await deductAllItemsStock(gsapi, deductionOps);
-      } catch (deductErr) {
-        console.error("Stock deduction failed, rolling back:", deductErr);
-        for (const [key, op] of appliedOps) {
+        applied = await deductAllItemsStock(gsapi, ops);
+      } catch (err) {
+        for (const [key, op] of applied) {
           if (key.includes("store")) {
-            await restoreStoreStock(gsapi, op.item, op.storeRowIndex + 2, op.oldStoreStock).catch(console.error);
+            await restoreStoreStock(gsapi, op.item, op.storeRowIndex + 2, op.oldStore).catch(console.error);
           }
           if (key.includes("loft")) {
-            await restoreLoftStock(gsapi, op.item, op.loftRowIndex + 2, op.oldIndividuals, op.oldPackets).catch(console.error);
+            await restoreLoftStock(gsapi, op.item, op.loftRowIndex + 2, op.oldIndiv, op.oldPackets).catch(console.error);
           }
         }
-        return res.status(500).json({ error: "Failed to deduct stock: " + ((deductErr as any).message || "Unknown error") });
+        return res.status(500).json({ error: "stock deduction failed" });
       }
 
-      for (const [key, op] of appliedOps) {
+      for (const [key, op] of applied) {
         if (key.includes("loftLog")) {
-          await logLoftFallback(gsapi, billNo, op.item, op.shade, op.usedFromLoft, timestamp).catch(console.error);
+          await logLoftFallback(gsapi, billNo, op.item, op.shade, op.usedLoft, timestamp).catch(console.error);
         }
       }
 
-      // customer upsert
+      // customer upsert new bill
       let customerId = "";
       try {
         const custRes = await gsapi.spreadsheets.values.get({
@@ -812,19 +840,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const custRows = custRes.data.values || [];
         const phoneRaw = customer.phone.toString().replace(/[^0-9]/g, "");
 
-        let existingIndex = -1;
+        let existingIdx = -1;
         for (let i = 0; i < custRows.length; i++) {
           const p1 = (custRows[i][2]?.toString() || "").replace(/[^0-9]/g, "");
           const p2 = (custRows[i][3]?.toString() || "").replace(/[^0-9]/g, "");
           if (p1 === phoneRaw || p2 === phoneRaw) {
-            existingIndex = i;
+            existingIdx = i;
             break;
           }
         }
 
         const pointsEarned = Math.floor((finalTotal / 100) * earnRate);
 
-        if (existingIndex === -1) {
+        if (existingIdx === -1) {
           customerId = generateCustomerId(custRows.filter((row: any) => row[0]?.toString().startsWith("LMS-")));
           await gsapi.spreadsheets.values.append({
             spreadsheetId: STORE_SHEET_ID,
@@ -845,13 +873,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           });
         } else {
-          customerId = custRows[existingIndex][0];
-          const existing = custRows[existingIndex];
+          customerId = custRows[existingIdx][0];
+          const existing = custRows[existingIdx];
           const currentSpend = Number(existing[6]) || 0;
           const currentBills = Number(existing[7]) || 0;
           const currentPoints = Number(existing[8]) || 0;
           const newPoints = currentPoints + pointsEarned;
-          const updateRow = existingIndex + 2;
+          const updateRow = existingIdx + 2;
           if (customer.name && customer.name !== existing[1]) {
             await gsapi.spreadsheets.values.update({
               spreadsheetId: STORE_SHEET_ID,
@@ -870,11 +898,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
       } catch (err) {
-        console.error("Customer upsert failed:", err);
+        console.error("customer upsert failed:", err);
         customerId = `TEMP-${customer.phone.replace(/[^0-9]/g, "")}`;
       }
 
-      // calculate backend derived profit for each item
       const profitSheet = await gsapi.spreadsheets.values.get({
         spreadsheetId: STORE_SHEET_ID,
         range: "Profit!A2:C",
@@ -895,22 +922,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const itemKey = `${entry.item.toLowerCase()}|${entry.shade?.toLowerCase() || ""}`;
         let costPrice = costMap.get(itemKey) || 0;
         if (costPrice === 0) {
-          const fallbackKey = `${entry.item.toLowerCase()}|`;
-          costPrice = costMap.get(fallbackKey) || 0;
+          const fallback = `${entry.item.toLowerCase()}|`;
+          costPrice = costMap.get(fallback) || 0;
         }
         const qtyNum = Number(entry.qty) || 0;
         const priceNum = Number(entry.price) || 0;
         const total = qtyNum * priceNum;
         const profit = total - (costPrice * qtyNum);
-        return {
-          ...entry,
-          total,
-          profit,
-          cost: costPrice,
-        };
+        return { ...entry, total, profit, cost: costPrice };
       });
 
-      const billValues = enhancedItems.map((entry: any) => [
+      const billRows = enhancedItems.map((entry: any) => [
         billNo,
         entry.item,
         entry.shade,
@@ -924,22 +946,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         finalTotal,
         customerId,
         timestamp,
-        "ACTIVE",
       ]);
 
       await gsapi.spreadsheets.values.append({
         spreadsheetId: STORE_SHEET_ID,
-        range: "Bill!A:N",
+        range: "Bill!A:M",
         valueInputOption: "USER_ENTERED",
-        requestBody: { values: billValues },
+        requestBody: { values: billRows },
       });
 
       return res.status(200).json({ success: true, billNo, customerId });
     }
 
-    res.status(405).json({ error: "Method not allowed" });
+    res.status(405).json({ error: "method not allowed" });
   } catch (err: any) {
     console.error(err);
-    res.status(500).json({ error: err.message || "Failed to process bill" });
+    res.status(500).json({ error: err.message || "failed to process bill" });
   }
 }

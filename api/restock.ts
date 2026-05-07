@@ -1,4 +1,4 @@
-// api/restock.ts
+// api/restock.ts (unchanged from previous working version, but ensure escapeSheetName added)
 import { google } from "googleapis";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -94,7 +94,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ============= STORE RESTOCK (low stock alert, deduplicate weekly, mark as Notified) =============
 async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
   const { item } = req.query;
   const isAll = item === "all";
@@ -112,7 +111,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
 
     await ensureRestockRequestsSheet(gsapi);
 
-    // Fetch recent requests (any status) within last 7 days
     const reqRes = await gsapi.spreadsheets.values.get({
       spreadsheetId: STORE_SHEET_ID,
       range: "Restock Requests!A2:D",
@@ -126,16 +124,14 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Get all sheets
     const sheetMeta = await gsapi.spreadsheets.get({
       spreadsheetId: STORE_SHEET_ID,
-      fields: "sheets.properties(title)",
+      fields: "sheets.properties.title",
     });
     const allSheets = (sheetMeta.data.sheets || []).map(s => s.properties?.title || "");
 
     const skipTabs = ["bill", "registry", "profit", "discount", "discounts", "customers", "pointslog", "pointsconfig", "restock requests", "loft fallback log", "dashboard"];
 
-    // Build list of valid item sheets: must have a header "Shade" in row 1
     const itemSheets: string[] = [];
     for (const sheetName of allSheets) {
       if (skipTabs.includes(sheetName.toLowerCase())) continue;
@@ -211,7 +207,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ message: null, summary });
     }
 
-    // Append new requests with "Pending" status
     if (newRequests.length > 0) {
       await gsapi.spreadsheets.values.append({
         spreadsheetId: STORE_SHEET_ID,
@@ -221,7 +216,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Build message
     const header = isAll
       ? `*FULL HOOKS RESTOCK — ${today}*\n⚠️ Items below ${LOW_STOCK_THRESHOLD} (not yet requested this week):\n\n`
       : `*HOOKS RESTOCK — ${today}*\nItem: *${itemsToProcess[0].toUpperCase()}*\n⚠️ Shades below ${LOW_STOCK_THRESHOLD} (not yet requested this week):\n\n`;
@@ -229,7 +223,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
     const message = header + restockLines.join("\n") + footer;
     const waLink = `https://wa.me/${RESTOCK_PHONE}?text=${encodeURIComponent(message)}`;
 
-    // Mark newly added requests as "Notified"
     if (newRequests.length > 0) {
       const lastRow = await gsapi.spreadsheets.values.get({
         spreadsheetId: STORE_SHEET_ID,
@@ -254,7 +247,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ============= HOOKS RESTOCK PLAN (target = 5 units per shade, cross‑verify with Loft/Bhiwandi) =============
 async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
   const { item } = req.query;
   if (!item || typeof item !== "string") {
@@ -267,7 +259,6 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
 
     const packetSize = await getPacketSize(gsapi, item);
 
-    // Read store sheet: B=shade, C=stock (hooks), F=loftIndiv, G=loftPackets, H=bhiwandi
     const storeRes = await gsapi.spreadsheets.values.get({
       spreadsheetId: STORE_SHEET_ID,
       range: `${escapeSheetName(item)}!B2:H`,
@@ -292,7 +283,6 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
       let remaining = needed;
       let plan: any = { shade, hooksStock, target: TARGET_STOCK, transfers: [] };
 
-      // 1. Bhiwandi first
       if (bhiwandi > 0) {
         const fromBhiwandi = Math.min(remaining, bhiwandi);
         if (fromBhiwandi > 0) {
@@ -301,7 +291,6 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // 2. Loft (individuals then packets)
       if (remaining > 0) {
         const loftTotal = loftIndiv + (loftPackets * packetSize);
         if (loftTotal > 0) {
@@ -324,7 +313,6 @@ async function handleHooksRestock(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // 3. Shortage (need to request from Bhiwandi)
       if (remaining > 0) {
         shortages.push({ shade, needed: Math.ceil(remaining / packetSize) });
       }
