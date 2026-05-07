@@ -835,7 +835,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const custRes = await gsapi.spreadsheets.values.get({
           spreadsheetId: STORE_SHEET_ID,
-          range: "Customers!A:I",
+          range: "Customers!A2:I",
         });
         const custRows = custRes.data.values || [];
         const phoneRaw = customer.phone.toString().replace(/[^0-9]/g, "");
