@@ -800,7 +800,7 @@ export default function App() {
       button:hover:not(:disabled) { background-color: #333 !important; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
       button:active:not(:disabled) { transform: translateY(0); }
   
-      @page { size: A4 potrait; margin: 0.5cm; }
+      @page { size: A4 landscape; margin: 0.2cm; }
   
       @media print { 
       .no-print { display: none !important; } 
