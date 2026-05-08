@@ -807,9 +807,9 @@ export default function App() {
       .print-only { display: inline !important; }
       body, html { margin: 0; padding: 0; background: white; width: 297mm; height: 210mm; }
       .app-container { background: white; box-shadow: none; border-radius: 0; margin: 0; padding: 0; max-width: 100%; width: 297mm; }
-      #print-bill { width: 140mm; margin: 0 auto; border: 1px solid #000 !important; box-shadow: none; border-radius: 0; padding: 6px 8px !important; page-break-inside: avoid; box-sizing: border-box; }
+      #print-bill { width: 148mm; margin: 0 auto; border: 1px solid #000 !important; box-shadow: none; border-radius: 0; padding: 6px 8px !important; page-break-inside: avoid; box-sizing: border-box; max-width: 148mm; }
       #print-bill .logo { width: 120px !important; margin-bottom: 4px !important; }
-      .bill-table { font-size: 9px !important; margin-top: 6px !important; }
+      .bill-table { font-size: 9px !important; margin-top: 6px !important; table-layout: fixed; }
       .bill-table th, .bill-table td { padding: 3px 2px !important; font-size: 9px !important; }
       .bill-table th { font-size: 8px !important; }
       .grandTotalRow { font-size: 12px !important; }
