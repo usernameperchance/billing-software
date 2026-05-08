@@ -788,37 +788,33 @@ export default function App() {
 
   return (
     <div className="app-container" style={styles.container}>
-    <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
-      * { font-family: 'Montserrat', sans-serif; }
-      .bill-table { border-left: 1px solid #c5cad1 !important; border-right: 1px solid #c5cad1 !important; }
-      .bill-table th, .bill-table td { border-right: 1px solid #c5cad1 !important; }
-      .bill-table th:first-child, .bill-table td:first-child { border-left: 1px solid #c5cad1 !important; }
-      .bill-table th:last-child, .bill-table td:last-child { border-right: none !important; }
-      input, button { font-family: 'Montserrat', sans-serif; }
-      input:focus { outline: none; box-shadow: 0 0 0 3px rgba(26,26,26,0.1); border-color: #1a1a1a !important; }
-      button:hover:not(:disabled) { background-color: #333 !important; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-      button:active:not(:disabled) { transform: translateY(0); }
-  
-      @page { size: A4 landscape; margin: 0.2cm; }
-  
-      @media print { 
-      .no-print { display: none !important; } 
-      .print-only { display: inline !important; }
-      body, html { margin: 0; padding: 0; background: white; width: 297mm; height: 210mm; }
-      .app-container { background: white; box-shadow: none; border-radius: 0; margin: 0; padding: 0; max-width: 100%; width: 297mm; }
-      #print-bill { width: 148mm; margin: 0 auto; border: 1px solid #000 !important; box-shadow: none; border-radius: 0; padding: 6px 8px !important; page-break-inside: avoid; box-sizing: border-box; max-width: 148mm; }
-      #print-bill .logo { width: 120px !important; margin-bottom: 4px !important; }
-      .bill-table { font-size: 9px !important; margin-top: 6px !important; table-layout: fixed; }
-      .bill-table th, .bill-table td { padding: 3px 2px !important; font-size: 9px !important; }
-      .bill-table th { font-size: 8px !important; }
-      .grandTotalRow { font-size: 12px !important; }
-      .metaLabel, .metaValue { font-size: 8px !important; min-width: auto !important; }
-      .customerInfoBox, .customerBox, .customerRow { padding: 4px 6px !important; margin-bottom: 4px !important; }
-      hr { margin: 6px 0 !important; }
-      .totalsBlock { margin-top: 4px !important; padding-top: 4px !important; }
-      .thankYou { margin-top: 6px !important; padding-top: 4px !important; font-size: 9px !important; }
-    `}</style>
+<style>{`@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+* { font-family: 'Montserrat', sans-serif; }
+.bill-table { border-left: 1px solid #c5cad1 !important; border-right: 1px solid #c5cad1 !important; }
+.bill-table th, .bill-table td { border-right: 1px solid #c5cad1 !important; }
+.bill-table th:first-child, .bill-table td:first-child { border-left: 1px solid #c5cad1 !important; }
+.bill-table th:last-child, .bill-table td:last-child { border-right: none !important; }
+input, button { font-family: 'Montserrat', sans-serif; }
+input:focus { outline: none; box-shadow: 0 0 0 3px rgba(26,26,26,0.1); border-color: #1a1a1a !important; }
+button:hover:not(:disabled) { background-color: #333 !important; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+button:active:not(:disabled) { transform: translateY(0); }
+@page { size: A4 portrait; margin: 1cm; }
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: inline !important; }
+  html, body { margin: 0; padding: 0; background: white; width: 210mm; height: 297mm; }
+  .app-container { background: white; box-shadow: none; margin: 0; padding: 0; width: 210mm; }
+  #print-bill { width: 100%; border: 1.5px solid #000 !important; box-shadow: none; border-radius: 0; padding: 16px 20px; box-sizing: border-box; page-break-inside: avoid; }
+  #print-bill .logo { width: 200px !important; margin-bottom: 8px !important; }
+  .bill-table { font-size: 12px; margin-top: 10px; }
+  .bill-table th, .bill-table td { padding: 6px 4px; font-size: 12px; }
+  .bill-table th { font-size: 11px; }
+  .grandTotalRow { font-size: 16px; }
+  .metaLabel, .metaValue { font-size: 11px; }
+  hr { margin: 12px 0; }
+  .totalsBlock { margin-top: 12px; padding-top: 8px; }
+  .thankYou { margin-top: 16px; padding-top: 8px; font-size: 12px; }
+}`}</style>
 
       {toast && <div style={{ position: "fixed", bottom: "24px", right: "24px", background: toast.type === 'success' ? '#10b981' : toast.type === 'error' ? '#ef4444' : '#3b82f6', color: '#fff', padding: "14px 20px", borderRadius: "0px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", fontSize: "13px", fontWeight: 600, zIndex: 9999, maxWidth: "300px", animation: "slideIn 0.3s ease", fontFamily: "'Montserrat', sans-serif", letterSpacing: "0.3px" }}>{toast.message}</div>}
       {deleteConfirmIdx !== null && <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998 }}>
