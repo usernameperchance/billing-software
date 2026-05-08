@@ -805,7 +805,7 @@ button:active:not(:disabled) { transform: translateY(0); }
   html, body { margin: 0; padding: 0; background: white; width: 210mm; height: 297mm; }
   .app-container { background: white; box-shadow: none; margin: 0; padding: 0; width: 210mm; }
   #print-bill { width: 100%; border: 1.5px solid #000 !important; box-shadow: none; border-radius: 0; padding: 16px 20px; box-sizing: border-box; page-break-inside: avoid; }
-  #print-bill .logo { width: 200px !important; margin-bottom: 8px !important; }
+  #print-bill .logo { width: 160px !important; margin-bottom: 10px !important; margin-top: 10px !important; }
   .bill-table { font-size: 12px; margin-top: 10px; }
   .bill-table th, .bill-table td { padding: 6px 4px; font-size: 12px; }
   .bill-table th { font-size: 11px; }
