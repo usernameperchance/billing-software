@@ -70,10 +70,13 @@ export default function App() {
   const [editingBillNo, setEditingBillNo] = useState<number | null>(null);
   const [originalBillDate, setOriginalBillDate] = useState("");
   const [originalBillTime, setOriginalBillTime] = useState("");
-  const [originalRowIndexes, setOriginalRowIndexes] = useState<number[]>([]); 
+  const [originalRowIndexes, setOriginalRowIndexes] = useState<number[]>([]);
   const [amountReceived, setAmountReceived] = useState(0);
+  const [editingPriceRow, setEditingPriceRow] = useState<number | null>(null);
+  const [editingPriceValue, setEditingPriceValue] = useState(0);
+  const [editShadeFilteredList, setEditShadeFilteredList] = useState<string[]>([]);
+  const [editShadeDropdownIndex, setEditShadeDropdownIndex] = useState(-1);
 
-  // helper: recalc single item totals/profit live
   const recalcItem = (i: BillItem): BillItem => {
     const q = Number(i.qty) || 0;
     const p = Number(i.price) || 0;
@@ -83,7 +86,8 @@ export default function App() {
     return { ...i, total, profit };
   };
 
-  // apply triosoft bulk pricing + recalc all
+  editShadeSuggestion;
+
   const applyTriosoftPricing = (itemsList: BillItem[]): BillItem[] => {
     const totalTriosoftQty = itemsList.reduce((sum, i) =>
       i.item.toLowerCase() === "triosoft" ? sum + i.qty : sum, 0
@@ -103,9 +107,7 @@ export default function App() {
     setItems(applyTriosoftPricing(newItems));
   };
 
-  // derived totals
   const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
-  const grandProfit = items.reduce((sum, i) => sum + i.profit, 0);
   const finalTotal = grandTotal + courierCharges;
   const changeAmount = amountReceived > finalTotal ? amountReceived - finalTotal : 0;
 
@@ -130,12 +132,13 @@ export default function App() {
     return { items: validatedItems, isValid: changes.length === 0, changes };
   };
 
+  // auto-save draft
   useEffect(() => {
     if (items.length > 0) {
-      const draft = { items, customerName, phone, redeemPoints, courierCharges };
+      const draft = { items, customerName, phone, redeemPoints, courierCharges, customerType };
       localStorage.setItem("billDraft", JSON.stringify(draft));
     }
-  }, [items, customerName, phone, redeemPoints, courierCharges]);
+  }, [items, customerName, phone, redeemPoints, courierCharges, customerType]);
 
   useEffect(() => {
     if (toast) {
@@ -144,11 +147,12 @@ export default function App() {
     }
   }, [toast]);
 
+  // recover draft
   useEffect(() => {
     const draft = localStorage.getItem("billDraft");
     if (draft) {
       try {
-        const { items: draftItems, customerName: draftName, phone: draftPhone, redeemPoints: draftRedeem, courierCharges: draftCourier } = JSON.parse(draft);
+        const { items: draftItems, customerName: draftName, phone: draftPhone, redeemPoints: draftRedeem, courierCharges: draftCourier, customerType: draftType } = JSON.parse(draft);
         if (draftItems?.length > 0) {
           const shouldRecover = window.confirm("You have an unsaved bill. Recover?");
           if (shouldRecover) {
@@ -160,6 +164,7 @@ export default function App() {
             setPhone(draftPhone || "");
             setRedeemPoints(draftRedeem || false);
             setCourierCharges(draftCourier || 0);
+            setCustomerType(draftType === "courier" ? "courier" : "walk-in");
             setToast({ message: "Bill recovered from draft", type: "success" });
           } else localStorage.removeItem("billDraft");
         }
@@ -237,6 +242,31 @@ export default function App() {
     if (validatingShade) return;
     setEditingShadeRow(null);
     setEditingShadeValue("");
+    setEditShadeFilteredList([]);
+    setEditShadeDropdownIndex(-1);
+  };
+
+  const startEditPrice = (idx: number, currentPrice: number) => {
+    setEditingPriceRow(idx);
+    setEditingPriceValue(currentPrice);
+  };
+
+  const saveEditPrice = (idx: number) => {
+    const newPrice = editingPriceValue;
+    if (isNaN(newPrice) || newPrice <= 0) {
+      alert("Price must be > 0");
+      return;
+    }
+    const updated = [...items];
+    updated[idx] = recalcItem({ ...updated[idx], price: newPrice });
+    updateItems(updated);
+    setEditingPriceRow(null);
+    setEditingPriceValue(0);
+  };
+
+  const cancelEditPrice = () => {
+    setEditingPriceRow(null);
+    setEditingPriceValue(0);
   };
 
   const [billDate] = useState(() => new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }));
@@ -244,11 +274,10 @@ export default function App() {
 
   const displayBillNo = editingBillNo ?? nextBillNo;
   const displayBillDate = editingBillNo ? (originalBillDate || billDate) : billDate;
-  const displayBillTime = editingBillNo ? (originalBillTime || billTime) : billTime; 
+  const displayBillTime = editingBillNo ? (originalBillTime || billTime) : billTime;
 
   const normalizedPhone = phone.replace(/[^0-9]/g, "");
   const isPhoneValid = normalizedPhone.length === 10;
-  // const customerMatchesPhone = !!customer && customer.phone.replace(/[^0-9]/g, "") === normalizedPhone;
 
   const fetchNextBillNo = () => {
     fetch("/api/bill")
@@ -295,9 +324,10 @@ export default function App() {
     showToast(`Customer selected: ${cust.name}`, "success");
   };
 
-  useEffect(() => { 
+  useEffect(() => {
     if (editingBillNo) return;
-    fetchNextBillNo(); }, [editingBillNo]);
+    fetchNextBillNo();
+  }, [editingBillNo]);
   useEffect(() => {
     if (editingBillNo) return;
     const interval = setInterval(() => fetchNextBillNo(), 30000);
@@ -589,62 +619,63 @@ export default function App() {
     img.src = svgUrl;
   });
 
-const saveBill = async () => {
-  if (items.length === 0 || saving) return false;
-  if (!isPhoneValid) { alert("Enter 10-digit customer phone"); return false; }
-  if (customerType === "courier" && courierCharges <= 0) {
-    alert("Courier charges required for courier orders");
-    return false;
-  }
-  setSaving(true);
-  setSavingProgress(true);
-  try {
-    const url = editingBillNo ? "/api/bill?action=edit" : "/api/bill";
-    const body: any = {
-      items: items.map(i => ({ ...i, total: i.qty * i.price, profit: i.profit })),
-      finalTotal,
-      courierCharges,
-      customer: { name: customerName, phone, type: customerType, courier: customerType === "courier" },
-      earnRate: pointsConfig?.earnRate ?? 0,
-      redeemRate: pointsConfig?.redeemRate ?? 0,
-    };
-    if (editingBillNo) {
-      body.originalBillNo = editingBillNo;
-      body.originalDate = originalBillDate;
-      body.originalTime = originalBillTime;
-      body.originalRowIndexes = originalRowIndexes; // pass the stored row indexes
+  const saveBill = async () => {
+    if (items.length === 0 || saving) return false;
+    if (!isPhoneValid) { alert("Enter 10-digit customer phone"); return false; }
+    if (customerType === "courier" && courierCharges <= 0) {
+      alert("Courier charges required for courier orders");
+      return false;
     }
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Save failed");
-    priceCache.current = {};
-    shadeCache.current = {};
-    sessionStorage.removeItem("allItems");
-    localStorage.removeItem("billDraft");
-    fetchNextBillNo();
-    setItems([]);
-    setItem("");
-    setShade("");
-    setSelectedRow(null);
-    setCustomer(null);
-    setCustomerName("");
-    setPhone("");
-    setRedeemPoints(false);
-    setCourierCharges(0);
-    setEditingBillNo(null);
-    setOriginalBillDate("");
-    setOriginalBillTime("");
-    setOriginalRowIndexes([]);
-    showToast(`Bill #${nextBillNo} saved!`, "success");
-    return true;
-  } catch (err: any) {
-    showToast(err.message, "error");
-    return false;
-  } finally {
-    setSaving(false);
-    setSavingProgress(false);
-  }
-};
+    setSaving(true);
+    setSavingProgress(true);
+    try {
+      const url = editingBillNo ? "/api/bill?action=edit" : "/api/bill";
+      const body: any = {
+        items: items.map(i => ({ ...i, total: i.qty * i.price, profit: i.profit })),
+        finalTotal,
+        courierCharges: customerType === "courier" ? courierCharges : 0,
+        customer: { name: customerName, phone, type: customerType, courier: customerType === "courier" },
+        earnRate: pointsConfig?.earnRate ?? 0,
+        redeemRate: pointsConfig?.redeemRate ?? 0,
+      };
+      if (editingBillNo) {
+        body.originalBillNo = editingBillNo;
+        body.originalDate = originalBillDate;
+        body.originalTime = originalBillTime;
+        body.originalRowIndexes = originalRowIndexes;
+      }
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      priceCache.current = {};
+      shadeCache.current = {};
+      sessionStorage.removeItem("allItems");
+      localStorage.removeItem("billDraft");
+      fetchNextBillNo();
+      setItems([]);
+      setItem("");
+      setShade("");
+      setSelectedRow(null);
+      setCustomer(null);
+      setCustomerName("");
+      setPhone("");
+      setRedeemPoints(false);
+      setCourierCharges(0);
+      setAmountReceived(0);
+      setEditingBillNo(null);
+      setOriginalBillDate("");
+      setOriginalBillTime("");
+      setOriginalRowIndexes([]);
+      showToast(`Bill #${nextBillNo} saved!`, "success");
+      return true;
+    } catch (err: any) {
+      showToast(err.message, "error");
+      return false;
+    } finally {
+      setSaving(false);
+      setSavingProgress(false);
+    }
+  };
 
   const sendWhatsAppWithBlob = async (blob: Blob) => {
     const cleaned = phone.replace(/[^0-9]/g, "");
@@ -726,34 +757,34 @@ const saveBill = async () => {
     } catch (err: any) { alert(err.message); } finally { setRestockLoading(false); }
   };
 
-const retrieveBillByNo = async (billNo: number) => {
-  if (!billNo || billNo <= 0) { showToast("Enter valid bill number", "error"); return; }
-  setBillRetrievalLoading(true);
-  try {
-    const res = await fetch(`/api/bill?action=getBill&billNo=${billNo}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    setRetrievedBill({ ...data.bill, originalRowIndexes: data.bill.originalRowIndexes });
-    showToast(`Bill #${billNo} retrieved`, "success");
-  } catch (err: any) { showToast(err.message, "error"); setRetrievedBill(null); }
-  finally { setBillRetrievalLoading(false); }
-};
+  const retrieveBillByNo = async (billNo: number) => {
+    if (!billNo || billNo <= 0) { showToast("Enter valid bill number", "error"); return; }
+    setBillRetrievalLoading(true);
+    try {
+      const res = await fetch(`/api/bill?action=getBill&billNo=${billNo}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setRetrievedBill({ ...data.bill, originalRowIndexes: data.bill.originalRowIndexes });
+      showToast(`Bill #${billNo} retrieved`, "success");
+    } catch (err: any) { showToast(err.message, "error"); setRetrievedBill(null); }
+    finally { setBillRetrievalLoading(false); }
+  };
 
-const loadBillForEdit = (bill: any) => {
-  const loadedItems = bill.items.map((it: any) => 
-  recalcItem({ ...it, cost: it.cost || 0, originalPrice: it.price }));
-  updateItems(loadedItems);
-  setCustomerName(bill.customerName);
-  setPhone(bill.customerPhone);
-  setCourierCharges(bill.courierCharges || null);
-  setEditingBillNo(bill.billNo);
-  setOriginalBillDate(bill.date);
-  setOriginalBillTime(bill.time);
-  setCustomer(null);
-  setOriginalRowIndexes(bill.originalRowIndexes);
-  setShowBillRetrieval(false);
-  showToast("Bill loaded. Edit and re-save.", "success");
-};
+  const loadBillForEdit = (bill: any) => {
+    const loadedItems = bill.items.map((it: any) => recalcItem({ ...it, cost: it.cost || 0, originalPrice: it.price }));
+    updateItems(loadedItems);
+    setCustomerName(bill.customerName);
+    setPhone(bill.customerPhone);
+    setCourierCharges(bill.courierCharges || 0);
+    setCustomerType(bill.courierCharges > 0 ? "courier" : "walk-in");
+    setEditingBillNo(bill.billNo);
+    setOriginalBillDate(bill.date);
+    setOriginalBillTime(bill.time);
+    setCustomer(null);
+    setOriginalRowIndexes(bill.originalRowIndexes);
+    setShowBillRetrieval(false);
+    showToast("Bill loaded. Edit and re-save.", "success");
+  };
 
   return (
     <div className="app-container" style={styles.container}>
@@ -772,19 +803,13 @@ const loadBillForEdit = (bill: any) => {
         @media print {
           .no-print { display: none !important; }
           .print-only { display: inline !important; }
-          body, html { margin: 0; padding: 0; background: white; font-family: 'Montserrat', Arial, sans-serif; width: 210mm; height: 297mm; }
+          body, html { margin: 0; padding: 0; background: white; width: 210mm; height: 297mm; }
           .app-container { background: white; box-shadow: none; border-radius: 0; margin: 0; padding: 0; max-width: 100%; width: 210mm; }
-          #print-bill { border: 1.5px solid #000 !important; box-shadow: none; border-radius: 0; margin: 0; padding: 16px 20px; page-break-inside: avoid; page-break-after: avoid; max-height: 297mm; overflow: hidden; width: 210mm; }
-          .bill-table { page-break-inside: avoid; border-left: 1px solid #000 !important; border-right: 1px solid #000 !important; }
-          .bill-table th, .bill-table td { border-right: 1px solid #000 !important; }
-          .bill-table th:first-child, .bill-table td:first-child { border-left: 1px solid #000 !important; }
-          .bill-table th:last-child, .bill-table td:last-child { border-right: none !important; }
-          .bill-table td, .bill-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; background-color: inherit; }
-          .bill-table th { background-color: #f0f1f3 !important; border-bottom: 1.5px solid #000 !important; border-top: 1.5px solid #000 !important; }
-          .bill-table tr:nth-child(odd) { background-color: #fff; }
-          .bill-table tr:nth-child(even) { background-color: #fafbfc; }
-          .bill-table td { border-bottom: 0.75px solid #e0e3e8; }
-          hr { display: none; border: none; margin: 12px 0; }
+          #print-bill { width: 148mm; margin: 0 auto; border: 1.5px solid #000 !important; box-shadow: none; border-radius: 0; padding: 10px 12px !important; page-break-inside: avoid; box-sizing: border-box; }
+          .bill-table { font-size: 10px; }
+          .bill-table th, .bill-table td { padding: 4px 2px; }
+          .bill-table th { font-size: 9px; }
+          .grandTotalRow { font-size: 14px; }
         }
       `}</style>
 
@@ -864,28 +889,163 @@ const loadBillForEdit = (bill: any) => {
                 <td style={styles.td}>{i.item}{i.misc && <span className="no-print" style={{ fontSize:10, color:"#e67e22" }}> (Misc)</span>}</td>
                 <td style={styles.td}>
                   {editingShadeRow === idx ? (
-                    <div style={styles.autofillWrapper}>
-                      <input type="text" value={editingShadeValue} onChange={e=>{ let val=e.target.value; setEditingShadeValue(val); let itemShades=shadeCache.current[i.item]||[]; let allNum=itemShades.length>0 && itemShades.every(s=>/^\d+$/.test(s.trim())); let sug=null; if(val && !allNum){ let trimmed=val.trim(); if(/^\d+$/.test(trimmed)) sug=itemShades.find(s=>s.trim().toLowerCase().startsWith(trimmed.toLowerCase()))||null; else { let localFuse=new Fuse(itemShades,{threshold:0.4,distance:100,minMatchCharLength:1}); sug=localFuse.search(val)[0]?.item??null; } } setEditShadeSuggestion(sug); }} onBlur={()=>saveEditShade(idx)} onKeyDown={(e)=>{ if(e.key==="Tab" && editShadeSuggestion && editingShadeValue !== editShadeSuggestion){ e.preventDefault(); setEditingShadeValue(editShadeSuggestion); setEditShadeSuggestion(null); } if(e.key==="Enter") saveEditShade(idx); if(e.key==="Escape") cancelEditShade(); }} autoFocus disabled={validatingShade} style={{ width:"100%", minWidth:"120px", padding:"6px8px", fontSize:"14px", border:"1px solid #ccc", borderRadius:"4px", boxSizing:"border-box" }} />
-                      {editShadeSuggestion && editingShadeValue !== editShadeSuggestion && <span style={styles.suggestion}>{editShadeSuggestion}</span>}
+                    <div style={{ position: "relative", width: "100%" }}>
+                      <input
+                        type="text"
+                        value={editingShadeValue}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingShadeValue(val);
+                          const shadesList = shadeCache.current[items[idx].item] || [];
+                          const filtered = shadesList.filter(s =>
+                            s.toLowerCase().includes(val.toLowerCase())
+                          ).slice(0, 8);
+                          setEditShadeFilteredList(filtered);
+                          setEditShadeDropdownIndex(-1);
+                        }}
+                        onBlur={() => saveEditShade(idx)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Tab" && editShadeFilteredList.length > 0 && editShadeDropdownIndex >= 0) {
+                            e.preventDefault();
+                            setEditingShadeValue(editShadeFilteredList[editShadeDropdownIndex]);
+                            setEditShadeFilteredList([]);
+                            setEditShadeDropdownIndex(-1);
+                            return;
+                          }
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveEditShade(idx);
+                            return;
+                          }
+                          if (e.key === "Escape") {
+                            cancelEditShade();
+                            return;
+                          }
+                          if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            setEditShadeDropdownIndex(prev =>
+                              prev < editShadeFilteredList.length - 1 ? prev + 1 : prev
+                            );
+                          }
+                          if (e.key === "ArrowUp") {
+                            e.preventDefault();
+                            setEditShadeDropdownIndex(prev => (prev > 0 ? prev - 1 : -1));
+                          }
+                        }}
+                        autoFocus
+                        disabled={validatingShade}
+                        style={{
+                          width: "100%",
+                          minWidth: "120px",
+                          padding: "4px 6px",
+                          fontSize: "12px",
+                          border: "1px solid #ccc",
+                          borderRadius: "4px",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                      {editShadeFilteredList.length > 0 && (
+                        <div style={{
+                          position: "absolute",
+                          top: "100%",
+                          left: 0,
+                          right: 0,
+                          marginTop: "2px",
+                          backgroundColor: "#fff",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "4px",
+                          maxHeight: "150px",
+                          overflowY: "auto",
+                          zIndex: 10,
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                        }}>
+                          {editShadeFilteredList.map((shadeOpt, sidx) => (
+                            <div
+                              key={shadeOpt}
+                              style={{
+                                padding: "4px 8px",
+                                cursor: "pointer",
+                                backgroundColor: editShadeDropdownIndex === sidx ? "#e2e8f0" : "#fff",
+                                fontSize: "11px",
+                                borderBottom: "1px solid #e9ecef",
+                              }}
+                              onClick={() => {
+                                setEditingShadeValue(shadeOpt);
+                                setEditShadeFilteredList([]);
+                                saveEditShade(idx);
+                              }}
+                              onMouseEnter={() => setEditShadeDropdownIndex(sidx)}
+                            >
+                              {shadeOpt}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px" }}>
-                      <span style={{ flex:1, wordBreak:"break-word", whiteSpace:"normal" }}>{i.shade}</span>
-                      <button className="no-print" onClick={()=>startEditShade(idx,i.shade)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:"14px", padding:"4px", color:"#666", borderRadius:"4px" }} title="Edit shade">✏️</button>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                      <span style={{ flex: 1, wordBreak: "break-word", whiteSpace: "normal" }}>{i.shade}</span>
+                      <button className="no-print" onClick={() => startEditShade(idx, i.shade)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px", padding: "4px", color: "#666", borderRadius: "4px" }} title="Edit shade">✏️</button>
                     </div>
                   )}
                 </td>
-                <td style={{ ...styles.td, textAlign:"center" }}>
+                <td style={{ ...styles.td, textAlign: "center" }}>
                   <span className="no-print" style={styles.qtyControls}>
                     <button style={styles.qtyBtn} onClick={(e)=>{ e.stopPropagation(); updateQty(idx, i.qty-1); }}>−</button>
                     <span style={styles.qtyNum}>{i.qty}</span>
                     <button style={styles.qtyBtn} onClick={(e)=>{ e.stopPropagation(); updateQty(idx, i.qty+1); }}>+</button>
                   </span>
-                  <span className="print-only" style={{ display:"none" }}>{i.qty}</span>
+                  <span className="print-only" style={{ display: "none" }}>{i.qty}</span>
                 </td>
-                <td style={{ ...styles.td, textAlign:"right", paddingRight:"20px" }}>₹{i.price}</td>
-                <td style={{ ...styles.td, textAlign:"right", fontWeight:700, paddingRight:"20px" }}>₹{i.total}</td>
-                <td className="no-print" style={{ ...styles.td, textAlign:"center" }}>
+                <td style={{ ...styles.td, textAlign: "right", paddingRight: "20px" }}>
+                  {editingPriceRow === idx ? (
+                    <input
+                      type="number"
+                      step="1"
+                      value={editingPriceValue}
+                      onChange={(e) => setEditingPriceValue(Number(e.target.value))}
+                      onBlur={() => saveEditPrice(idx)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveEditPrice(idx);
+                        if (e.key === "Escape") cancelEditPrice();
+                      }}
+                      autoFocus
+                      style={{
+                        width: "80px",
+                        padding: "2px 4px",
+                        fontSize: "12px",
+                        textAlign: "right",
+                        border: "1px solid #ccc",
+                        borderRadius: "4px",
+                      }}
+                    />
+                  ) : (
+                    <>
+                      ₹{i.price}
+                      <button
+                        className="no-print"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEditPrice(idx, i.price);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                          padding: "2px 4px",
+                          marginLeft: "6px",
+                          color: "#666",
+                        }}
+                        title="Edit price"
+                      >
+                        ✏️
+                      </button>
+                    </>
+                  )}
+                </td>
+                <td style={{ ...styles.td, textAlign: "right", fontWeight: 700, paddingRight: "20px" }}>₹{i.total}</td>
+                <td className="no-print" style={{ ...styles.td, textAlign: "center" }}>
                   <button style={styles.removeBtn} onClick={(e)=>{ e.stopPropagation(); confirmDeleteItem(idx); }}>✕</button>
                 </td>
               </tr>)}
@@ -893,36 +1053,36 @@ const loadBillForEdit = (bill: any) => {
         </table>
         <hr style={styles.divider} />
         <div style={styles.totalsBlock}>
-          <div className="no-print" style={{ ...styles.profitRow, display:"flex", justifyContent:"space-between", paddingRight:"8px" }}><span>Net Profit</span><span>₹{grandProfit}</span></div>
           {courierCharges > 0 && <div style={{ ...styles.discountRow, display:"flex", justifyContent:"space-between", paddingRight:"8px", color:"#dc2626" }}><span>Courier Charges</span><span>+ ₹{courierCharges}</span></div>}
           <div style={{ ...styles.grandTotalRow, display:"flex", justifyContent:"space-between" }}><span>Grand Total</span><span>₹{finalTotal}</span></div>
         </div>
-        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "16px", marginTop: "12px", fontFamily: "'Montserrat', sans-serif" }}>
-  <span style={{ fontSize: "13px", fontWeight: 600 }}>💰 Cash Received:</span>
-  <input
-    type="text"
-    inputMode="decimal"
-    value={amountReceived}
-    onChange={(e) => setAmountReceived(Number(e.target.value) || 0)}
-    placeholder="0"
-    style={{
-      width: "100px",
-      padding: "6px 10px",
-      fontSize: "13px",
-      border: "1px solid #cbd5e1",
-      borderRadius: "0px",
-      outline: "none",
-      textAlign: "right",
-      fontFamily: "'Montserrat', sans-serif",
-    }}
-  />
-  {changeAmount > 0 && (
-    <span style={{ fontSize: "13px", fontWeight: 700, color: "#10b981" }}>
-      💵 Change: ₹{changeAmount}
-    </span>
-  )}
-</div>
         <p style={styles.thankYou}>Thank you for your purchase!</p>
+      </div>
+
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px", gap: "16px", alignItems: "center" }}>
+        <span style={{ fontSize: "13px", fontWeight: 600 }}>💰 Cash Received:</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={amountReceived}
+          onChange={(e) => setAmountReceived(Number(e.target.value) || 0)}
+          placeholder="0"
+          style={{
+            width: "100px",
+            padding: "6px 10px",
+            fontSize: "13px",
+            border: "1px solid #cbd5e1",
+            borderRadius: "0px",
+            outline: "none",
+            textAlign: "right",
+            fontFamily: "'Montserrat', sans-serif",
+          }}
+        />
+        {changeAmount > 0 && (
+          <span style={{ fontSize: "13px", fontWeight: 700, color: "#10b981" }}>
+            💵 Change: ₹{changeAmount}
+          </span>
+        )}
       </div>
 
       <div className="no-print" style={styles.customerCard}>
@@ -978,7 +1138,7 @@ const loadBillForEdit = (bill: any) => {
           <div><strong>Date & Time:</strong> {retrievedBill.date} {retrievedBill.time}</div>
           <div style={{ fontWeight:700, marginTop:"8px", borderTop:"1px solid #e5e7eb", paddingTop:"8px" }}>Items:</div>
           {retrievedBill.items.map((it:any, idx:number)=> <div key={idx} style={{ display:"flex", justifyContent:"space-between", paddingBottom:"4px", borderBottom:"1px solid #e5e7eb" }}><span>{it.item} ({it.shade}) × {it.qty}</span><span>₹{it.total}</span></div>)}
-          <div style={{ marginTop:"8px", fontWeight:700, display:"flex", justifyContent:"space-between" }}><span>Final Total:</span><span style={{ color:"#10b981" }}>₹{retrievedBill.finalTotal}</span></div>
+          <div style={{ marginTop:"8px", fontWeight:700, display:"flex", justifyContent:"space-between" }}><span>Final Total:</span><span>₹{retrievedBill.finalTotal}</span></div>
           {retrievedBill.courierCharges > 0 && <div style={{ display:"flex", justifyContent:"space-between", color:"#dc2626", fontSize:"12px" }}><span>Courier:</span><span>₹{retrievedBill.courierCharges}</span></div>}
           <button onClick={()=>loadBillForEdit(retrievedBill)} style={{ marginTop:"12px", padding:"8px12px", width:"100%", fontSize:"13px", fontWeight:600, backgroundColor:"#10b981", color:"#fff", border:"none", borderRadius:"4px", cursor:"pointer" }}>📋 Load for Reprint</button>
         </div>}
@@ -1019,10 +1179,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   button: { padding: "12px 24px", fontSize: "13px", fontWeight: 700, borderRadius: "0px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.2s ease", letterSpacing: "0.3px" },
   billArea: { background: "#ffffff", borderRadius: "0px", padding: "32px 36px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1.5px solid #1a1a1a", pageBreakInside: "avoid" },
   billHeader: { display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "0px", gap: "0px", paddingBottom: "0px" },
-  metadataRight: { alignSelf: "flex-end", textAlign: "right", marginTop: "0px" },
-  metaRow: { display: "flex", justifyContent: "flex-end", gap: "16px", alignItems: "center", marginBottom: "3px", fontSize: "13px" },
-  customerBox: { border: "1px solid #e2e8f0", padding: "16px 18px", marginBottom: "0px", marginTop: "6px", backgroundColor: "#f8f9fb", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  customerBoxRow: { display: "flex", gap: "18px", alignItems: "center" },
   logo: { width: "300px", height: "auto", objectFit: "contain", display: "block", margin: "0 auto 0px auto" },
   metaLabel: { fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 800, minWidth: "52px" },
   metaValue: { fontSize: "15px", fontWeight: 700, color: "#0f172a", textAlign: "right", minWidth: "80px", letterSpacing: "-0.3px" },
@@ -1039,7 +1195,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   qtyNum: { minWidth: "28px", textAlign: "center", fontWeight: 700, fontSize: "13px" },
   removeBtn: { background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: "15px", fontWeight: 700, padding: "2px 6px", borderRadius: "0px", transition: "color 0.2s" },
   totalsBlock: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px", marginTop: "8px", paddingTop: "8px", borderTop: "1px dotted #cbd5e1" },
-  profitRow: { display: "flex", gap: "64px", fontSize: "13px", color: "#64748b", justifyContent: "space-between", minWidth: "260px", fontWeight: 600 },
   discountRow: { display: "flex", gap: "64px", fontSize: "14px", color: "#059669", fontWeight: 800, justifyContent: "space-between", minWidth: "260px", letterSpacing: "-0.3px" },
   grandTotalRow: { display: "flex", gap: "64px", fontSize: "17px", fontWeight: 600, color: "#0f172a", borderTop: "1px solid #cbd5e1", paddingTop: "10px", marginTop: "8px", justifyContent: "space-between", minWidth: "260px", letterSpacing: "-0.3px" },
   thankYou: { textAlign: "center", marginTop: "16px", paddingTop: "12px", borderTop: "1px dotted #cbd5e1", fontSize: "11px", color: "#475569", letterSpacing: "0.4px", fontWeight: 700, textTransform: "uppercase" },
