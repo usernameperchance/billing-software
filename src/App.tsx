@@ -1063,7 +1063,7 @@ button:active:not(:disabled) { transform: translateY(0); }
       </div>
 
       <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px", gap: "16px", alignItems: "center" }}>
-        <span style={{ fontSize: "13px", fontWeight: 600 }}>💰 Cash Received:</span>
+        <span style={{ fontSize: "13px", fontWeight: 600 }}>Cash Received:</span>
         <input
           type="text"
           inputMode="decimal"
@@ -1083,7 +1083,7 @@ button:active:not(:disabled) { transform: translateY(0); }
         />
         {changeAmount > 0 && (
           <span style={{ fontSize: "13px", fontWeight: 700, color: "#10b981" }}>
-            💵 Change: ₹{changeAmount}
+            Change: ₹{changeAmount}
           </span>
         )}
       </div>
