@@ -163,42 +163,82 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
     const newRequests: any[] = [];
     let totalShades = 0;
 
-    for (const tab of itemsToProcess) {
-      try {
-        const stockRes = await gsapi.spreadsheets.values.get({
-          spreadsheetId: STORE_SHEET_ID,
-          range: `${escapeSheetName(tab)}!B2:C`,
-        });
-        const rows = stockRes.data.values || [];
-        let tabLines: string[] = [];
-        for (const r of rows) {
-          const shade = r[0]?.toString().trim();
-          const stockCell = r[1];
-          if (!shade) continue;
-          if (stockCell === undefined || stockCell === null || stockCell === "") continue;
-          const stock = Number(stockCell);
-          if (isNaN(stock)) continue;
-          if (stock >= LOW_STOCK_THRESHOLD) continue;
+// inside handleStoreRestock, for each tab
+for (const tab of itemsToProcess) {
+  try {
+    const stockRes = await gsapi.spreadsheets.values.get({
+      spreadsheetId: STORE_SHEET_ID,
+      range: `${escapeSheetName(tab)}!B2:C`,
+    });
+    const rows = stockRes.data.values || [];
 
-          const key = `${tab}|${shade}`;
-          if (recentRequests.has(key)) {
-            console.log(`Skipping ${key} – already requested within last 7 days`);
-            continue;
-          }
+    // collector for low shades
+    const lowShades: { shade: string, stock: number, num?: number }[] = [];
+    for (const r of rows) {
+      const shade = r[0]?.toString().trim();
+      const stockCell = r[1];
+      if (!shade) continue;
+      if (stockCell === undefined || stockCell === null || stockCell === "") continue;
+      const stock = Number(stockCell);
+      if (isNaN(stock)) continue;
+      if (stock >= LOW_STOCK_THRESHOLD) continue;
 
-          tabLines.push(`  ${shade} → stock: ${stock}`);
-          newRequests.push([tab, shade, today, "Pending"]);
-          totalShades++;
+      const key = `${tab}|${shade}`;
+      if (recentRequests.has(key)) continue;
+
+      let num: number | undefined = undefined;
+      if (tab.toLowerCase() === "816") {
+        // extract numeric prefix (e.g., "72a" -> 72)
+        const match = shade.match(/^\d+/);
+        if (match) num = parseInt(match[0], 10);
+      }
+      lowShades.push({ shade, stock, num });
+    }
+
+    // apply per‑item logic for 816: limit consecutive numeric sequences to at most 2
+    let shadesToInclude = new Set(lowShades.map(s => s.shade));
+    if (tab.toLowerCase() === "816") {
+      // group by consecutive numeric values (consider shades with `num` defined)
+      const numeric = lowShades.filter(s => s.num !== undefined).sort((a,b) => a.num! - b.num!);
+      const sequences: { items: typeof numeric }[] = [];
+      let current: typeof numeric = [];
+      for (let i = 0; i < numeric.length; i++) {
+        if (current.length === 0) {
+          current.push(numeric[i]);
+        } else if (numeric[i].num === current[current.length-1].num! + 1) {
+          current.push(numeric[i]);
+        } else {
+          if (current.length >= 3) sequences.push({ items: current });
+          current = [numeric[i]];
         }
-        if (tabLines.length) {
-          restockLines.push(`*${tab.toUpperCase()}*`);
-          restockLines.push(...tabLines);
-          restockLines.push("");
+      }
+      if (current.length >= 3) sequences.push({ items: current });
+
+      // keep only first two in each sequence of length >=3
+      for (const seq of sequences) {
+        for (let i = 2; i < seq.items.length; i++) {
+          shadesToInclude.delete(seq.items[i].shade);
         }
-      } catch (err) {
-        console.error(`Error reading sheet ${tab}:`, err);
       }
     }
+
+    let tabLines: string[] = [];
+    for (const { shade, stock } of lowShades) {
+      if (!shadesToInclude.has(shade)) continue;
+      tabLines.push(`  ${shade} → stock: ${stock}`);
+      newRequests.push([tab, shade, today, "Pending"]);
+      totalShades++;
+    }
+
+    if (tabLines.length) {
+      restockLines.push(`*${tab.toUpperCase()}*`);
+      restockLines.push(...tabLines);
+      restockLines.push("");
+    }
+  } catch (err) {
+    console.error(`Error reading sheet ${tab}:`, err);
+  }
+}
 
     if (totalShades === 0) {
       let summary = isAll
