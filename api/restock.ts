@@ -95,12 +95,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
-  const { item } = req.query;
+  const { item, alternate: alt } = req.query;
   const isAll = item === "all";
+  const userAlternate = (alt && typeof alt === "string") ? alt.trim() : null;
 
   if (!item || typeof item !== "string") {
     return res.status(400).json({ error: "Missing item parameter. Use 'all' for full list or specify an item name." });
   }
+
+  // no compulsory alternate – optional
 
   try {
     const client = await auth.getClient();
@@ -111,6 +114,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
 
     await ensureRestockRequestsSheet(gsapi);
 
+    // fetch recent requests
     const reqRes = await gsapi.spreadsheets.values.get({
       spreadsheetId: STORE_SHEET_ID,
       range: "Restock Requests!A2:D",
@@ -124,6 +128,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // get all item sheets
     const sheetMeta = await gsapi.spreadsheets.get({
       spreadsheetId: STORE_SHEET_ID,
       fields: "sheets.properties.title",
@@ -163,87 +168,71 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
     const newRequests: any[] = [];
     let totalShades = 0;
 
-// inside handleStoreRestock, for each tab
-for (const tab of itemsToProcess) {
-  try {
-    const stockRes = await gsapi.spreadsheets.values.get({
-      spreadsheetId: STORE_SHEET_ID,
-      range: `${escapeSheetName(tab)}!B2:C`,
-    });
-    const rows = stockRes.data.values || [];
+    for (const tab of itemsToProcess) {
+      try {
+        const stockRes = await gsapi.spreadsheets.values.get({
+          spreadsheetId: STORE_SHEET_ID,
+          range: `${escapeSheetName(tab)}!B2:C`,
+        });
+        const rows = stockRes.data.values || [];
 
-    // collector for low shades
-    const lowShades: { shade: string, stock: number, num?: number }[] = [];
-    for (const r of rows) {
-      const shade = r[0]?.toString().trim();
-      const stockCell = r[1];
-      if (!shade) continue;
-      if (stockCell === undefined || stockCell === null || stockCell === "") continue;
-      const stock = Number(stockCell);
-      if (isNaN(stock)) continue;
-      if (stock >= LOW_STOCK_THRESHOLD) continue;
+        // collect low shades (stock < threshold and not recently requested)
+        const lowShades: { shade: string, stock: number }[] = [];
+        for (const r of rows) {
+          const shade = r[0]?.toString().trim();
+          const stockCell = r[1];
+          if (!shade) continue;
+          if (stockCell === undefined || stockCell === null || stockCell === "") continue;
+          const stock = Number(stockCell);
+          if (isNaN(stock)) continue;
+          if (stock >= LOW_STOCK_THRESHOLD) continue;
 
-      const key = `${tab}|${shade}`;
-      if (recentRequests.has(key)) continue;
+          const key = `${tab}|${shade}`;
+          if (recentRequests.has(key)) continue;
 
-      let num: number | undefined = undefined;
-      if (tab.toLowerCase() === "816") {
-        // extract numeric prefix (e.g., "72a" -> 72)
-        const match = shade.match(/^\d+/);
-        if (match) num = parseInt(match[0], 10);
-      }
-      lowShades.push({ shade, stock, num });
-    }
-
-    // apply per‑item logic for 816: limit consecutive numeric sequences to at most 2
-    let shadesToInclude = new Set(lowShades.map(s => s.shade));
-    if (tab.toLowerCase() === "816") {
-      // group by consecutive numeric values (consider shades with `num` defined)
-      const numeric = lowShades.filter(s => s.num !== undefined).sort((a,b) => a.num! - b.num!);
-      const sequences: { items: typeof numeric }[] = [];
-      let current: typeof numeric = [];
-      for (let i = 0; i < numeric.length; i++) {
-        if (current.length === 0) {
-          current.push(numeric[i]);
-        } else if (numeric[i].num === current[current.length-1].num! + 1) {
-          current.push(numeric[i]);
-        } else {
-          if (current.length >= 3) sequences.push({ items: current });
-          current = [numeric[i]];
+          lowShades.push({ shade, stock });
         }
-      }
-      if (current.length >= 3) sequences.push({ items: current });
 
-      // keep only first two in each sequence of length >=3
-      for (const seq of sequences) {
-        for (let i = 2; i < seq.items.length; i++) {
-          shadesToInclude.delete(seq.items[i].shade);
+        // determine which shades to include
+        let shadesToInclude = new Set(lowShades.map(s => s.shade));
+
+        // special handling for 816 when not "all"
+        if (!isAll && tab.toLowerCase() === "816") {
+          if (userAlternate && lowShades.some(s => s.shade === userAlternate)) {
+            // user specified a valid alternate – only that shade
+            shadesToInclude = new Set([userAlternate]);
+          } else if (userAlternate) {
+            // user specified an alternate that is not low – include nothing for this item
+            shadesToInclude = new Set();
+          }
+          // if no alternate provided, include all low shades (normal behavior)
         }
+
+        let tabLines: string[] = [];
+        for (const { shade, stock } of lowShades) {
+          if (!shadesToInclude.has(shade)) continue;
+          tabLines.push(`  ${shade} → stock: ${stock}`);
+          newRequests.push([tab, shade, today, "Pending"]);
+          totalShades++;
+        }
+
+        if (tabLines.length) {
+          restockLines.push(`*${tab.toUpperCase()}*`);
+          restockLines.push(...tabLines);
+          restockLines.push("");
+        }
+      } catch (err) {
+        console.error(`Error reading sheet ${tab}:`, err);
       }
     }
-
-    let tabLines: string[] = [];
-    for (const { shade, stock } of lowShades) {
-      if (!shadesToInclude.has(shade)) continue;
-      tabLines.push(`  ${shade} → stock: ${stock}`);
-      newRequests.push([tab, shade, today, "Pending"]);
-      totalShades++;
-    }
-
-    if (tabLines.length) {
-      restockLines.push(`*${tab.toUpperCase()}*`);
-      restockLines.push(...tabLines);
-      restockLines.push("");
-    }
-  } catch (err) {
-    console.error(`Error reading sheet ${tab}:`, err);
-  }
-}
 
     if (totalShades === 0) {
       let summary = isAll
         ? "No items below threshold or all already requested this week."
         : `No restock needed for ${item} (all shades above threshold or already requested).`;
+      if (!isAll && item.toLowerCase() === "816" && userAlternate) {
+        summary = `Alternate shade '${userAlternate}' for 816 is not low or already requested.`;
+      }
       return res.status(200).json({ message: null, summary });
     }
 

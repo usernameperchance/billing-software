@@ -739,14 +739,28 @@ export default function App() {
 
   const generateStoreRestock = async () => {
     const input = window.prompt("Enter item name (or 'all'):");
-    if (!input?.trim()) return;
-    const item = input.trim();
+      if (!input?.trim()) return;
+      const item = input.trim();
+      let alternate: string | null = null;
+
+      // optional alternate for 816
+      if (item.toLowerCase() !== "all" && item.toLowerCase() === "816") {
+        alternate = window.prompt("Enter alternate shade to restock (optional, leave blank to restock all low shades):");
+        if (alternate && alternate.trim() === "") alternate = null;
+        // no alert if empty – it's optional
+      }
+
     setRestockLoading(true);
     try {
-      const res = await fetch(`/api/restock?type=store&item=${encodeURIComponent(item)}`);
+      let url = `/api/restock?type=store&item=${encodeURIComponent(item)}`;
+      if (alternate) url += `&alternate=${encodeURIComponent(alternate)}`;
+      const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      if (!data.message) { alert(data.summary || "No restock needed"); return; }
+      if (!data.message) {
+        alert(data.summary || "No restock needed");
+        return;
+        }
       if (window.confirm(`Restock Summary:\n${data.summary}\n\nOpen WhatsApp?`)) {
         const anchor = document.createElement("a");
         anchor.href = data.waLink;
@@ -754,7 +768,11 @@ export default function App() {
         anchor.rel = "noopener noreferrer";
         anchor.click();
       }
-    } catch (err: any) { alert(err.message); } finally { setRestockLoading(false); }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setRestockLoading(false);
+    }
   };
 
   const retrieveBillByNo = async (billNo: number) => {
