@@ -277,7 +277,12 @@ export default function App() {
   const displayBillTime = editingBillNo ? (originalBillTime || billTime) : billTime;
 
   const normalizedPhone = phone.replace(/[^0-9]/g, "");
-  const isPhoneValid = normalizedPhone.length === 10;
+  const isPhoneValid = normalizedPhone.length >= 10;
+  const phoneWithCountryCode = () => {
+    if (!phone.trim()) return "";
+    if (phone.startsWith("+")) return phone; // already has country code
+    return `+91${normalizedPhone.slice(-10)}`; // prepend +91, take last 10 digits
+  };
 
   const fetchNextBillNo = () => {
     fetch("/api/bill")
@@ -621,7 +626,7 @@ export default function App() {
 
   const saveBill = async () => {
     if (items.length === 0 || saving) return false;
-    if (!isPhoneValid) { alert("Enter 10-digit customer phone"); return false; }
+    if (!isPhoneValid) { alert("Enter 10-digit phone (with or without +91)"); return false; }
     if (customerType === "courier" && courierCharges <= 0) {
       alert("Courier charges required for courier orders");
       return false;
@@ -634,7 +639,7 @@ export default function App() {
         items: items.map(i => ({ ...i, total: i.qty * i.price, profit: i.profit })),
         finalTotal,
         courierCharges: customerType === "courier" ? courierCharges : 0,
-        customer: { name: customerName, phone, type: customerType, courier: customerType === "courier" },
+        customer: { name: customerName, phone: phoneWithCountryCode(), type: customerType, courier: customerType === "courier" },
         earnRate: pointsConfig?.earnRate ?? 0,
         redeemRate: pointsConfig?.redeemRate ?? 0,
       };
