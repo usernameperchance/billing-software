@@ -27,6 +27,13 @@ function generateCustomerId(rows: any[][]): string {
   return `LMS-${String(next).padStart(4, "0")}`;
 }
 
+function normalizePhone(phone: string): string {
+  const input = phone.toString().trim();
+  if (input.startsWith("+")) return input; // keep international format
+  const digits = input.replace(/[^0-9]/g, "");
+  return "+91" + digits.slice(-10); // no country code = add +91 to last 10 digits
+}
+
 function escapeSheetName(name: string): string {
   return `'${name.replace(/'/g, "''")}'`;
 }
@@ -629,13 +636,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             range: "Customers!A:I",
           });
           const custRows = custRes.data.values || [];
-          const phoneRaw = customer.phone.toString().replace(/[^0-9]/g, "");
+          const phoneNormalized = normalizePhone(customer.phone);
 
           let existingIdx = -1;
           for (let i = 0; i < custRows.length; i++) {
-            const p1 = (custRows[i][2]?.toString() || "").replace(/[^0-9]/g, "");
-            const p2 = (custRows[i][3]?.toString() || "").replace(/[^0-9]/g, "");
-            if (p1 === phoneRaw || p2 === phoneRaw) {
+            const p1 = normalizePhone(custRows[i][2]?.toString() || "");
+            const p2 = normalizePhone(custRows[i][3]?.toString() || "");
+            if (p1 === phoneNormalized || p2 === phoneNormalized) {
               existingIdx = i;
               break;
             }
@@ -653,7 +660,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 values: [[
                   newCustomerId,
                   customer.name || "",
-                  phoneRaw,
+                  phoneNormalized,
                   "",
                   originalDate,
                   originalDate,
@@ -735,7 +742,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           originalDate,
           originalTime,
           entry.profit,
-          courierCharges,
+          courierCharges > 0 ? courierCharges : "",
           finalTotal,
           newCustomerId,
           timestamp,
@@ -838,13 +845,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           range: "Customers!A2:I",
         });
         const custRows = custRes.data.values || [];
-        const phoneRaw = customer.phone.toString().replace(/[^0-9]/g, "");
+        const phoneNormalized = normalizePhone(customer.phone);
 
         let existingIdx = -1;
         for (let i = 0; i < custRows.length; i++) {
-          const p1 = (custRows[i][2]?.toString() || "").replace(/[^0-9]/g, "");
-          const p2 = (custRows[i][3]?.toString() || "").replace(/[^0-9]/g, "");
-          if (p1 === phoneRaw || p2 === phoneRaw) {
+          const p1 = normalizePhone(custRows[i][2]?.toString() || "");
+          const p2 = normalizePhone(custRows[i][3]?.toString() || "");
+          if (p1 === phoneNormalized || p2 === phoneNormalized) {
             existingIdx = i;
             break;
           }
@@ -862,7 +869,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               values: [[
                 customerId,
                 customer.name || "",
-                phoneRaw,
+                phoneNormalized,
                 "",
                 date,
                 date,
@@ -942,7 +949,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         date,
         time,
         entry.profit,
-        courierCharges,
+        courierCharges > 0 ? courierCharges : "",
         finalTotal,
         customerId,
         timestamp,

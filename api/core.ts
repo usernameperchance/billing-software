@@ -10,6 +10,13 @@ const auth = new google.auth.GoogleAuth({
 const SPREADSHEET_ID = process.env.SHEET_ID!;
 const LOFT_SHEET_ID = process.env.LOFT_SHEET_ID!;
 
+function normalizePhone(phone: string): string {
+  const input = phone.toString().trim();
+  if (input.startsWith("+")) return input; // keep international format
+  const digits = input.replace(/[^0-9]/g, "");
+  return "+91" + digits.slice(-10); // no country code = add +91 to last 10 digits
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -159,10 +166,10 @@ async function handleGetCustomer(gsapi: any, req: VercelRequest, res: VercelResp
   });
 
   const rows = response.data.values || [];
-  const phoneStr = phone.toString().trim();
+  const phoneNormalized = normalizePhone(phone);
   const matchedRow = rows.find((r: any) => {
-    const rowPhone = r[2]?.toString().trim();
-    return rowPhone === phoneStr;
+    const rowPhone = normalizePhone(r[2]?.toString() || "");
+    return rowPhone === phoneNormalized;
   });
 
   if (!matchedRow) {
