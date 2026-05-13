@@ -1,4 +1,4 @@
-// api/restock.ts (unchanged from previous working version, but ensure escapeSheetName added)
+// api/restock.ts
 import { google } from "googleapis";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -74,6 +74,30 @@ async function ensureRestockRequestsSheet(gsapi: any) {
   }
 }
 
+async function loadAlternateShades(gsapi: any): Promise<Map<string, Map<string, string>>> {
+  // returns Map<item, Map<originalShade, alternateShade>>
+  const altMap = new Map<string, Map<string, string>>();
+  try {
+    const res = await gsapi.spreadsheets.values.get({
+      spreadsheetId: STORE_SHEET_ID,
+      range: "Alternate Shades!A2:C",
+    });
+    const rows = res.data.values || [];
+    for (const row of rows) {
+      const item = row[0]?.toString().trim();
+      const original = row[1]?.toString().trim();
+      const alternate = row[2]?.toString().trim();
+      if (item && original && alternate) {
+        if (!altMap.has(item)) altMap.set(item, new Map());
+        altMap.get(item)!.set(original, alternate);
+      }
+    }
+  } catch (err) {
+    console.warn("Could not read Alternate Shades sheet", err);
+  }
+  return altMap;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -95,15 +119,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
-  const { item, alternate: alt } = req.query;
+  const { item } = req.query;
   const isAll = item === "all";
-  const userAlternate = (alt && typeof alt === "string") ? alt.trim() : null;
 
   if (!item || typeof item !== "string") {
     return res.status(400).json({ error: "Missing item parameter. Use 'all' for full list or specify an item name." });
   }
-
-  // no compulsory alternate – optional
 
   try {
     const client = await auth.getClient();
@@ -114,7 +135,8 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
 
     await ensureRestockRequestsSheet(gsapi);
 
-    // fetch recent requests
+    const altMap = await loadAlternateShades(gsapi);
+
     const reqRes = await gsapi.spreadsheets.values.get({
       spreadsheetId: STORE_SHEET_ID,
       range: "Restock Requests!A2:D",
@@ -128,7 +150,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // get all item sheets
     const sheetMeta = await gsapi.spreadsheets.get({
       spreadsheetId: STORE_SHEET_ID,
       fields: "sheets.properties.title",
@@ -176,8 +197,7 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
         });
         const rows = stockRes.data.values || [];
 
-        // collect low shades (stock < threshold and not recently requested)
-        const lowShades: { shade: string, stock: number }[] = [];
+        const lowShades: { original: string, stock: number }[] = [];
         for (const r of rows) {
           const shade = r[0]?.toString().trim();
           const stockCell = r[1];
@@ -190,27 +210,31 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
           const key = `${tab}|${shade}`;
           if (recentRequests.has(key)) continue;
 
-          lowShades.push({ shade, stock });
+          lowShades.push({ original: shade, stock });
         }
 
-        // determine which shades to include
-        let shadesToInclude = new Set(lowShades.map(s => s.shade));
+        // apply alternate mapping
+        const shadesToRequest: { shade: string, stock: number }[] = [];
+        const alternatesForItem = altMap.get(tab) || new Map();
+        // keep track of which alternates we already used to avoid duplicates
+        const usedAlternateForOriginal = new Map<string, string>();
 
-        // special handling for 816 when not "all"
-        if (!isAll && tab.toLowerCase() === "816") {
-          if (userAlternate && lowShades.some(s => s.shade === userAlternate)) {
-            // user specified a valid alternate – only that shade
-            shadesToInclude = new Set([userAlternate]);
-          } else if (userAlternate) {
-            // user specified an alternate that is not low – include nothing for this item
-            shadesToInclude = new Set();
+        for (const { original, stock } of lowShades) {
+          let finalShade = original;
+          if (alternatesForItem.has(original)) {
+            finalShade = alternatesForItem.get(original)!;
+            // if this alternate shade is already used for another original, skip? or allow? we'll allow but warn
+            if (usedAlternateForOriginal.has(finalShade)) {
+              console.log(`Alternate ${finalShade} already used for ${usedAlternateForOriginal.get(finalShade)}, skipping ${original}`);
+              continue;
+            }
+            usedAlternateForOriginal.set(finalShade, original);
           }
-          // if no alternate provided, include all low shades (normal behavior)
+          shadesToRequest.push({ shade: finalShade, stock });
         }
 
         let tabLines: string[] = [];
-        for (const { shade, stock } of lowShades) {
-          if (!shadesToInclude.has(shade)) continue;
+        for (const { shade, stock } of shadesToRequest) {
           tabLines.push(`  ${shade} → stock: ${stock}`);
           newRequests.push([tab, shade, today, "Pending"]);
           totalShades++;
@@ -230,9 +254,6 @@ async function handleStoreRestock(req: VercelRequest, res: VercelResponse) {
       let summary = isAll
         ? "No items below threshold or all already requested this week."
         : `No restock needed for ${item} (all shades above threshold or already requested).`;
-      if (!isAll && item.toLowerCase() === "816" && userAlternate) {
-        summary = `Alternate shade '${userAlternate}' for 816 is not low or already requested.`;
-      }
       return res.status(200).json({ message: null, summary });
     }
 
