@@ -62,12 +62,11 @@ export default function App() {
   const [printPreview, setPrintPreview] = useState(false);
   const [courierCharges, setCourierCharges] = useState(0);
   const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const [itemDropdownIndex, setItemDropdownIndex] = useState(-1);
   const [showShadeDropdown, setShowShadeDropdown] = useState(false);
   const [shadeDropdownIndex, setShadeDropdownIndex] = useState(-1);
-  const [customerType, setCustomerType] = useState<"walk-in" | "courier">("walk-in");
-  const [showBillRetrieval, setShowBillRetrieval] = useState(false);
-  const [billSearchNo, setBillSearchNo] = useState("");
-  const [retrievedBill, setRetrievedBill] = useState<any>(null);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [customerDropdownIndex, setCustomerDropdownIndex] = useState(-1);
   const [billRetrievalLoading, setBillRetrievalLoading] = useState(false);
   const [editingBillNo, setEditingBillNo] = useState<number | null>(null);
   const [originalBillDate, setOriginalBillDate] = useState("");
@@ -944,17 +943,86 @@ button:active:not(:disabled) { transform: translateY(0); }
         </div>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center", marginTop: "12px" }}>
           <div style={{ position: "relative", flex: 1 }}>
-            <input ref={itemRef} value={item} onChange={e => { setItem(e.target.value); setShowItemDropdown(true); }} onKeyDown={e => e.key === "Tab" && setShowItemDropdown(false)} placeholder="Item..." style={styles.smallInput} autoFocus autoComplete="off" />
+            <input 
+              ref={itemRef} 
+              value={item} 
+              onChange={e => { setItem(e.target.value); setShowItemDropdown(true); setItemDropdownIndex(-1); }} 
+              onFocus={() => item && setShowItemDropdown(true)}
+              onBlur={() => setTimeout(() => setShowItemDropdown(false), 200)}
+              onKeyDown={e => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setShowItemDropdown(true);
+                  setItemDropdownIndex(prev => prev < filteredItems.length - 1 ? prev + 1 : prev);
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setItemDropdownIndex(prev => prev > 0 ? prev - 1 : -1);
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (itemDropdownIndex >= 0 && itemDropdownIndex < filteredItems.length) {
+                    setItem(filteredItems[itemDropdownIndex]);
+                    setShowItemDropdown(false);
+                    setItemDropdownIndex(-1);
+                    shadeRef.current?.focus();
+                  }
+                } else if (e.key === "Escape") {
+                  setShowItemDropdown(false);
+                  setItemDropdownIndex(-1);
+                } else if (e.key === "Tab") {
+                  setShowItemDropdown(false);
+                  setItemDropdownIndex(-1);
+                }
+              }}
+              placeholder="Item..." 
+              style={styles.smallInput} 
+              autoFocus 
+              autoComplete="off" 
+            />
             {itemSuggestion && item !== itemSuggestion && <span style={styles.suggestion}>{itemSuggestion}</span>}
             {showItemDropdown && filteredItems.length > 0 && <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: "2px", backgroundColor: "#fff", border: "1px solid #cbd5e1", borderRadius: "4px", maxHeight: "200px", overflowY: "auto", zIndex: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-              {filteredItems.map(n => <div key={n} style={{ padding: "8px 12px", cursor: "pointer", backgroundColor: item.toLowerCase() === n.toLowerCase() ? "#f0f4f8" : "#fff", borderBottom: "1px solid #f0f0f0", fontSize: "13px" }} onClick={() => { setItem(n); setShowItemDropdown(false); }} onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f0f4f8"} onMouseLeave={e => e.currentTarget.style.backgroundColor = item.toLowerCase() === n.toLowerCase() ? "#f0f4f8" : "#fff" }>{n}</div>)}
+              {filteredItems.map((n, idx) => <div key={n} style={{ padding: "8px 12px", cursor: "pointer", backgroundColor: itemDropdownIndex === idx ? "#cbd5e1" : item.toLowerCase() === n.toLowerCase() ? "#f0f4f8" : "#fff", borderBottom: "1px solid #f0f0f0", fontSize: "13px", fontWeight: itemDropdownIndex === idx ? 600 : 400 }} onClick={() => { setItem(n); setShowItemDropdown(false); setItemDropdownIndex(-1); }} onMouseEnter={() => setItemDropdownIndex(idx)} onMouseLeave={() => setItemDropdownIndex(-1)}>{n}</div>)}
             </div>}
             {item && !allItems.some(i => i.toLowerCase() === item.toLowerCase()) && <span style={{ fontSize: 11, color: "#e67e22", marginLeft: 8 }}>(New item – no stock deduction)</span>}
           </div>
           {!isStandard && <div style={{ position: "relative", flex: 1 }}>
-            {needsShadeDropdown ? <input ref={shadeRef} value={shade} onChange={e => { setShade(e.target.value); setShowShadeDropdown(true); setShadeDropdownIndex(-1); }} onFocus={() => setShowShadeDropdown(true)} onKeyDown={e => { if (e.key === "Tab") { setShowShadeDropdown(false); setShadeDropdownIndex(-1); } else if (e.key === "ArrowDown") { e.preventDefault(); const filtered = shades.filter(s => !shade.trim() || s.toLowerCase().includes(shade.toLowerCase())).slice(0,8); setShadeDropdownIndex(prev => prev < filtered.length-1 ? prev+1 : prev); } else if (e.key === "ArrowUp") { e.preventDefault(); setShadeDropdownIndex(prev => prev > 0 ? prev-1 : -1); } else if (e.key === "Enter") { e.preventDefault(); const filtered = shades.filter(s => !shade.trim() || s.toLowerCase().includes(shade.toLowerCase())).slice(0,8); if (shadeDropdownIndex >=0 && shadeDropdownIndex < filtered.length) { setShade(filtered[shadeDropdownIndex]); setShowShadeDropdown(false); setShadeDropdownIndex(-1); } } }} placeholder="Shade/Variant..." style={styles.smallInput} autoComplete="off" /> : <input ref={shadeRef} value={shade} onChange={e => setShade(e.target.value)} placeholder="Shade/Variant..." style={styles.smallInput} autoComplete="off" />}
+            {needsShadeDropdown ? <input 
+              ref={shadeRef} 
+              value={shade} 
+              onChange={e => { setShade(e.target.value); setShowShadeDropdown(true); setShadeDropdownIndex(-1); }} 
+              onFocus={() => shade && setShowShadeDropdown(true)}
+              onBlur={() => setTimeout(() => { setShowShadeDropdown(false); setShadeDropdownIndex(-1); }, 200)}
+              onKeyDown={e => { 
+                if (e.key === "Tab") { 
+                  setShowShadeDropdown(false); 
+                  setShadeDropdownIndex(-1); 
+                } else if (e.key === "ArrowDown") { 
+                  e.preventDefault();
+                  setShowShadeDropdown(true);
+                  const filtered = shades.filter(s => !shade.trim() || s.toLowerCase().includes(shade.toLowerCase())).slice(0,8); 
+                  setShadeDropdownIndex(prev => prev < filtered.length-1 ? prev+1 : prev); 
+                } else if (e.key === "ArrowUp") { 
+                  e.preventDefault(); 
+                  setShadeDropdownIndex(prev => prev > 0 ? prev-1 : -1); 
+                } else if (e.key === "Enter") { 
+                  e.preventDefault(); 
+                  const filtered = shades.filter(s => !shade.trim() || s.toLowerCase().includes(shade.toLowerCase())).slice(0,8); 
+                  if (shadeDropdownIndex >=0 && shadeDropdownIndex < filtered.length) { 
+                    setShade(filtered[shadeDropdownIndex]); 
+                    setShowShadeDropdown(false); 
+                    setShadeDropdownIndex(-1); 
+                    setTimeout(() => qtyRef.current?.focus(), 50);
+                  }
+                } else if (e.key === "Escape") {
+                  setShowShadeDropdown(false);
+                  setShadeDropdownIndex(-1);
+                }
+              }} 
+              placeholder="Shade/Variant..." 
+              style={styles.smallInput} 
+              autoComplete="off" 
+            /> : <input ref={shadeRef} value={shade} onChange={e => setShade(e.target.value)} placeholder="Shade/Variant..." style={styles.smallInput} autoComplete="off" />}
             {needsShadeDropdown && showShadeDropdown && shades.length > 0 && <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: "2px", backgroundColor: "#fff", border: "1px solid #cbd5e1", borderRadius: "4px", maxHeight: "200px", overflowY: "auto", zIndex: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-              {shades.filter(s => !shade.trim() || s.toLowerCase().includes(shade.toLowerCase())).slice(0,8).map((sv, i) => <div key={sv} style={{ padding: "8px 12px", cursor: "pointer", backgroundColor: shadeDropdownIndex === i ? "#cbd5e1" : shade.toLowerCase() === sv.toLowerCase() ? "#f0f4f8" : "#fff", borderBottom: "1px solid #f0f0f0", fontSize: "13px" }} onClick={() => { setShade(sv); setShowShadeDropdown(false); setShadeDropdownIndex(-1); }} onMouseEnter={() => setShadeDropdownIndex(i)} onMouseLeave={() => setShadeDropdownIndex(-1)}>{sv}</div>)}
+              {shades.filter(s => !shade.trim() || s.toLowerCase().includes(shade.toLowerCase())).slice(0,8).map((sv, i) => <div key={sv} style={{ padding: "8px 12px", cursor: "pointer", backgroundColor: shadeDropdownIndex === i ? "#cbd5e1" : shade.toLowerCase() === sv.toLowerCase() ? "#f0f4f8" : "#fff", borderBottom: "1px solid #f0f0f0", fontSize: "13px", fontWeight: shadeDropdownIndex === i ? 600 : 400 }} onClick={() => { setShade(sv); setShowShadeDropdown(false); setShadeDropdownIndex(-1); }} onMouseEnter={() => setShadeDropdownIndex(i)} onMouseLeave={() => setShadeDropdownIndex(-1)}>{sv}</div>)}
             </div>}
             {!needsShadeDropdown && shadeSuggestion && shade !== shadeSuggestion && <span style={styles.suggestion}>{shadeSuggestion}</span>}
           </div>}
@@ -1202,9 +1270,52 @@ button:active:not(:disabled) { transform: translateY(0); }
         </div>
         <div style={{ display:"flex", gap:"12px", flexWrap:"wrap", alignItems:"center" }}>
           <div style={{ position:"relative", flex:1 }}>
-            <input value={customerName} onChange={e=>{ setCustomerName(e.target.value); searchCustomersByName(e.target.value); }} placeholder="Search Customer Name..." style={styles.smallInput} />
+            <input 
+              value={customerName} 
+              onChange={e=>{ setCustomerName(e.target.value); searchCustomersByName(e.target.value); setCustomerDropdownIndex(-1); }}
+              onFocus={() => customerSearchResults.length > 0 && setShowCustomerDropdown(true)}
+              onBlur={() => setTimeout(() => { setShowCustomerDropdown(false); setCustomerDropdownIndex(-1); }, 200)}
+              onKeyDown={e => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setShowCustomerDropdown(true);
+                  setCustomerDropdownIndex(prev => prev < customerSearchResults.length - 1 ? prev + 1 : prev);
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setCustomerDropdownIndex(prev => prev > 0 ? prev - 1 : -1);
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (customerDropdownIndex >= 0 && customerDropdownIndex < customerSearchResults.length) {
+                    selectCustomerFromSearch(customerSearchResults[customerDropdownIndex]);
+                    setShowCustomerDropdown(false);
+                    setCustomerDropdownIndex(-1);
+                  }
+                } else if (e.key === "Escape") {
+                  setShowCustomerDropdown(false);
+                  setCustomerDropdownIndex(-1);
+                } else if (e.key === "Tab") {
+                  setShowCustomerDropdown(false);
+                  setCustomerDropdownIndex(-1);
+                }
+              }}
+              placeholder="Search Customer Name..." 
+              style={styles.smallInput} 
+            />
             {showCustomerDropdown && customerSearchResults.length>0 && <div style={{ position:"absolute", top:"100%", left:0, right:0, background:"#fff", border:"1px solid #cbd5e1", borderTop:"none", borderRadius:"0 0 6px 6px", maxHeight:"200px", overflowY:"auto", zIndex:1000 }}>
-              {customerSearchResults.map((cust,idx)=> <div key={idx} onClick={()=>selectCustomerFromSearch(cust)} style={{ padding:"10px12px", borderBottom:idx<customerSearchResults.length-1?"1px solid #f0f0f0":"none", cursor:"pointer", fontSize:"13px" }} onMouseEnter={e=>e.currentTarget.style.background="#f8f9fb"} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+              {customerSearchResults.map((cust,idx)=> <div 
+                key={idx} 
+                onClick={()=>{ selectCustomerFromSearch(cust); setShowCustomerDropdown(false); setCustomerDropdownIndex(-1); }} 
+                onMouseEnter={() => setCustomerDropdownIndex(idx)}
+                onMouseLeave={() => setCustomerDropdownIndex(-1)}
+                style={{ 
+                  padding:"10px 12px", 
+                  borderBottom:idx<customerSearchResults.length-1?"1px solid #f0f0f0":"none", 
+                  cursor:"pointer", 
+                  fontSize:"13px",
+                  backgroundColor: customerDropdownIndex === idx ? "#f0f4f8" : "#fff",
+                  fontWeight: customerDropdownIndex === idx ? 600 : 400
+                }}
+              >
                 <div style={{ fontWeight:600, color:"#0f172a" }}>{cust.customerId} — {cust.name}</div>
                 <div style={{ fontSize:"11px", color:"#64748b", marginTop:"2px" }}>📞 {cust.phone}{cust.phone2?`, ${cust.phone2}`:""} • {cust.points} pts</div>
               </div>)}
