@@ -716,7 +716,7 @@ export default function App() {
     try {
       const url = editingBillNo ? "/api/bill?action=edit" : "/api/bill";
       const body: any = {
-        items: items.map(i => ({ ...i, total: i.qty * i.price, profit: i.profit })),
+        items: items.map(i => ({ ...i, total: i.qty * i.price, profit: i.profit, mode })),
         finalTotal,
         courierCharges: customerType === "courier" ? courierCharges : 0,
         customer: { name: customerName, phone: phoneWithCountryCode(), type: customerType, courier: customerType === "courier" },

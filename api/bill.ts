@@ -38,6 +38,17 @@ function escapeSheetName(name: string): string {
   return `'${name.replace(/'/g, "''")}'`;
 }
 
+function getStockDeductionMultiplier(item: string, mode: string): number {
+  const itemLower = item.toLowerCase();
+  if (itemLower === "816") {
+    return mode === "box" ? 4 : 1; // 816 box = 4 balls, individual = 1
+  }
+  if (itemLower === "baby soft") {
+    return mode === "individual" ? 0 : 1; // baby soft individual = no deduction, box = 1
+  }
+  return 1; // default: deduct as qty
+}
+
 async function getPacketSize(gsapi: any, article: string): Promise<number> {
   try {
     const res = await gsapi.spreadsheets.values.get({
@@ -284,6 +295,7 @@ async function validateAllItemsStock(
 interface StockDeductionOp {
   item: string;
   shade: string;
+  mode: string;
   storeRowIndex: number;
   storeStock: number;
   loftRowIndex: number;
@@ -301,10 +313,12 @@ async function deductAllItemsStock(
   const applied = new Map<string, any>();
 
   for (const op of operations) {
-    const { item, shade, storeRowIndex, storeStock, loftRowIndex, loftIndividuals, loftPackets, packetSize, qty, timestamp } = op;
+    const { item, shade, mode, storeRowIndex, storeStock, loftRowIndex, loftIndividuals, loftPackets, packetSize, qty, timestamp } = op;
+    const multiplier = getStockDeductionMultiplier(item, mode);
+    const deductionQty = qty * multiplier;
 
     try {
-      let remaining = qty;
+      let remaining = deductionQty;
       let usedStore = 0;
       let usedLoft = 0;
 
@@ -615,18 +629,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const ops = validations
           .filter(v => !items.find(i => i.item === v.item && i.shade === v.shade)?.misc)
-          .map(v => ({
-            item: v.item,
-            shade: v.shade,
-            storeRowIndex: v.storeRowIndex,
-            storeStock: v.storeStock,
-            loftRowIndex: v.loftRowIndex,
-            loftIndividuals: v.loftIndividuals,
-            loftPackets: v.loftPackets,
-            packetSize: v.packetSize,
-            qty: v.qty,
-            timestamp,
-          }));
+          .map(v => {
+            const modeFromItem = items.find(i => i.item === v.item && i.shade === v.shade)?.mode || "individual";
+            return {
+              item: v.item,
+              shade: v.shade,
+              mode: modeFromItem,
+              storeRowIndex: v.storeRowIndex,
+              storeStock: v.storeStock,
+              loftRowIndex: v.loftRowIndex,
+              loftIndividuals: v.loftIndividuals,
+              loftPackets: v.loftPackets,
+              packetSize: v.packetSize,
+              qty: v.qty,
+              timestamp,
+            };
+          });
         await deductAllItemsStock(gsapi, ops);
 
         let newCustomerId = "";
@@ -803,18 +821,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const ops = validations
         .filter(v => !items.find(i => i.item === v.item && i.shade === v.shade)?.misc)
-        .map(v => ({
-          item: v.item,
-          shade: v.shade,
-          storeRowIndex: v.storeRowIndex,
-          storeStock: v.storeStock,
-          loftRowIndex: v.loftRowIndex,
-          loftIndividuals: v.loftIndividuals,
-          loftPackets: v.loftPackets,
-          packetSize: v.packetSize,
-          qty: v.qty,
-          timestamp,
-        }));
+        .map(v => {
+          const modeFromItem = items.find(i => i.item === v.item && i.shade === v.shade)?.mode || "individual";
+          return {
+            item: v.item,
+            shade: v.shade,
+            mode: modeFromItem,
+            storeRowIndex: v.storeRowIndex,
+            storeStock: v.storeStock,
+            loftRowIndex: v.loftRowIndex,
+            loftIndividuals: v.loftIndividuals,
+            loftPackets: v.loftPackets,
+            packetSize: v.packetSize,
+            qty: v.qty,
+            timestamp,
+          };
+        });
 
       let applied = new Map();
       try {
