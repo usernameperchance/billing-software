@@ -57,7 +57,6 @@ export default function App() {
   const [editShadeSuggestion, setEditShadeSuggestion] = useState<string | null>(null);
   const [validatingShade, setValidatingShade] = useState(false);
   const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [printPreview, setPrintPreview] = useState(false);
   const [courierCharges, setCourierCharges] = useState(0);
@@ -67,6 +66,10 @@ export default function App() {
   const [shadeDropdownIndex, setShadeDropdownIndex] = useState(-1);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customerDropdownIndex, setCustomerDropdownIndex] = useState(-1);
+  const [customerType, setCustomerType] = useState<"walk-in" | "courier">("walk-in");
+  const [showBillRetrieval, setShowBillRetrieval] = useState(false);
+  const [billSearchNo, setBillSearchNo] = useState("");
+  const [retrievedBill, setRetrievedBill] = useState<any>(null);
   const [billRetrievalLoading, setBillRetrievalLoading] = useState(false);
   const [editingBillNo, setEditingBillNo] = useState<number | null>(null);
   const [originalBillDate, setOriginalBillDate] = useState("");
