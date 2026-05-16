@@ -41,6 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return await handleGetPrice(gsapi, req, res);
       case "getCost":
         return await handleGetCost(gsapi, req, res);
+      case "getBoxPrice":
+        return await handleGetBoxPrice(gsapi, req, res);
       case "getCustomer":
         return await handleGetCustomer(gsapi, req, res);
       case "searchCustomersByName":
@@ -241,4 +243,36 @@ async function handleSearchCustomersById(gsapi: any, req: VercelRequest, res: Ve
       points: Number(matched[7]) || 0,
     },
   });
+}
+
+async function handleGetBoxPrice(gsapi: any, req: VercelRequest, res: VercelResponse) {
+  const { item, mode } = req.query;
+  if (!item || typeof item !== "string") {
+    return res.status(400).json({ error: "Missing item parameter" });
+  }
+  if (!mode || typeof mode !== "string" || !["individual", "box"].includes(mode)) {
+    return res.status(400).json({ error: "Invalid mode parameter (individual or box)" });
+  }
+
+  try {
+    const response = await gsapi.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "Box Price!A2:C",
+    });
+
+    const rows = response.data.values || [];
+    const matched = rows.find((r: any) => r[0]?.toString().trim().toLowerCase() === item.toString().trim().toLowerCase());
+
+    if (!matched) {
+      return res.status(200).json({ price: null, message: "Item not found in Box Price sheet" });
+    }
+
+    const priceIndex = mode === "box" ? 1 : 2;
+    const price = Number(matched[priceIndex]) || null;
+
+    return res.status(200).json({ price });
+  } catch (err: any) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to fetch box price" });
+  }
 }

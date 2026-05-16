@@ -12,6 +12,7 @@ type BillItem = {
   total: number;
   profit: number;
   misc?: boolean;
+  priceOverridden?: boolean;
 };
 
 type Customer = { customerId: string; name: string; phone: string; phone2?: string; points: number; totalSpend: number; totalBills: number };
@@ -23,6 +24,7 @@ export default function App() {
   const [shades, setShades] = useState<string[]>([]);
   const [item, setItem] = useState("");
   const [shade, setShade] = useState("");
+  const [mode, setMode] = useState<"individual" | "box">("individual");
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
   const [cost, setCost] = useState(0);
@@ -94,7 +96,7 @@ export default function App() {
     );
     const applyBulk = totalTriosoftQty > 0 && totalTriosoftQty % 6 === 0;
     return itemsList.map(i => {
-      if (i.item.toLowerCase() === "triosoft") {
+      if (i.item.toLowerCase() === "triosoft" && !i.priceOverridden) {
         const newPrice = applyBulk ? 110 : (i.originalPrice || i.price);
         const updated = { ...i, price: newPrice, originalPrice: i.originalPrice || i.price };
         return recalcItem(updated);
@@ -122,11 +124,11 @@ export default function App() {
             const currentPrice = priceData.price || it.price;
             if (currentPrice !== it.price) {
               changes.push(`${it.item}: ₹${it.price} → ₹${currentPrice}`);
-              return { ...it, price: currentPrice, total: it.qty * currentPrice };
+              return { ...it, price: currentPrice, total: it.qty * currentPrice, priceOverridden: false };
             }
           } catch (err) { console.error(err); }
         }
-        return it;
+        return { ...it, priceOverridden: false };
       })
     );
     return { items: validatedItems, isValid: changes.length === 0, changes };
@@ -171,6 +173,17 @@ export default function App() {
       } catch (err) { console.error(err); }
     }
   }, []);
+
+  // Fetch price when mode or shade changes
+  useEffect(() => {
+    if (!item) return;
+    (async () => {
+      const fetchedPrice = await fetchPriceByMode(item, shade);
+      if (fetchedPrice !== null && fetchedPrice > 0) {
+        setPrice(fetchedPrice);
+      }
+    })();
+  }, [mode, shade, item]);
 
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'info') => setToast({ message: msg, type });
 
@@ -228,7 +241,7 @@ export default function App() {
         newCost = costData.cost || items[idx].cost;
       } catch (err) { console.error(err); }
       const updated = [...items];
-      updated[idx] = recalcItem({ ...updated[idx], shade: matched, price: newPrice, cost: newCost });
+      updated[idx] = recalcItem({ ...updated[idx], shade: matched, price: newPrice, cost: newCost, priceOverridden: false });
       updateItems(updated);
       setEditingShadeRow(null);
       setEditingShadeValue("");
@@ -258,7 +271,7 @@ export default function App() {
       return;
     }
     const updated = [...items];
-    updated[idx] = recalcItem({ ...updated[idx], price: newPrice });
+    updated[idx] = recalcItem({ ...updated[idx], price: newPrice, priceOverridden: true });
     updateItems(updated);
     setEditingPriceRow(null);
     setEditingPriceValue(0);
@@ -551,16 +564,16 @@ export default function App() {
 
     const newItem = recalcItem({
       item, shade: finalShade, qty, cost: cost || 0, price, originalPrice: price, misc: isMisc,
-      total: 0, profit: 0,
+      total: 0, profit: 0, priceOverridden: false,
     });
     updateItems([...items, newItem]);
 
     if (fromBarcode) {
-      setItem(""); setShade(""); setQty(1); setPrice(0); setCost(0);
+      setItem(""); setShade(""); setQty(1); setPrice(0); setCost(0); setMode("individual");
       setShowItemDropdown(false); setShowShadeDropdown(false);
       setTimeout(() => barcodeInputRef.current?.focus(), 50);
     } else {
-      setItem(""); setShade(""); setQty(1); setPrice(0); setCost(0);
+      setItem(""); setShade(""); setQty(1); setPrice(0); setCost(0); setMode("individual");
       setTimeout(() => itemRef.current?.focus(), 50);
     }
   };
@@ -568,8 +581,51 @@ export default function App() {
   const updateQty = (idx: number, newQty: number) => {
     if (newQty < 1) return;
     const updated = [...items];
-    updated[idx] = recalcItem({ ...updated[idx], qty: newQty });
+    updated[idx] = recalcItem({ ...updated[idx], qty: newQty, priceOverridden: false });
     updateItems(updated);
+  };
+
+  const fetchPriceByMode = async (itemName: string, selectedShade?: string): Promise<number | null> => {
+    try {
+      const itemLower = itemName.toLowerCase();
+      if (itemLower === "816") {
+        if (mode === "individual") {
+          // 816 individual mode: fetch from normal sheet
+          if (!selectedShade) return null;
+          const res = await fetch(`/api/core?action=getPrice&item=${encodeURIComponent(itemName)}&shade=${encodeURIComponent(selectedShade)}`);
+          const data = await res.json();
+          return data.price || null;
+        } else {
+          // 816 box mode: fetch from Box Price sheet
+          const res = await fetch(`/api/core?action=getBoxPrice&item=${encodeURIComponent(itemName)}&mode=${mode}`);
+          const data = await res.json();
+          return data.price || null;
+        }
+      } else if (itemLower === "baby soft") {
+        if (mode === "box") {
+          // Baby Soft box/bottle mode: fetch from normal sheet
+          if (!selectedShade) return null;
+          const res = await fetch(`/api/core?action=getPrice&item=${encodeURIComponent(itemName)}&shade=${encodeURIComponent(selectedShade)}`);
+          const data = await res.json();
+          return data.price || null;
+        } else {
+          // Baby Soft individual yarn ball mode: fetch from Box Price sheet (individual column)
+          const res = await fetch(`/api/core?action=getBoxPrice&item=${encodeURIComponent(itemName)}&mode=individual`);
+          const data = await res.json();
+          return data.price || null;
+        }
+      } else {
+        // For other items (Coats): normal sheet with shade, or shade + " Box" if mode is box
+        const shadeToUse = mode === "box" && selectedShade ? `${selectedShade} Box` : selectedShade;
+        if (!shadeToUse) return null;
+        const res = await fetch(`/api/core?action=getPrice&item=${encodeURIComponent(itemName)}&shade=${encodeURIComponent(shadeToUse)}`);
+        const data = await res.json();
+        return data.price || null;
+      }
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
   };
 
   const removeItem = (idx: number) => {
@@ -794,7 +850,7 @@ export default function App() {
   };
 
   const loadBillForEdit = (bill: any) => {
-    const loadedItems = bill.items.map((it: any) => recalcItem({ ...it, cost: it.cost || 0, originalPrice: it.price }));
+    const loadedItems = bill.items.map((it: any) => recalcItem({ ...it, cost: it.cost || 0, originalPrice: it.price, priceOverridden: false }));
     updateItems(loadedItems);
     setCustomerName(bill.customerName);
     setPhone(bill.customerPhone);
@@ -878,6 +934,10 @@ button:active:not(:disabled) { transform: translateY(0); }
             </div>}
             {!needsShadeDropdown && shadeSuggestion && shade !== shadeSuggestion && <span style={styles.suggestion}>{shadeSuggestion}</span>}
           </div>}
+          <div style={{ display: "flex", gap: "4px" }}>
+            <button onClick={() => setMode("individual")} style={{ ...styles.button, background: mode === "individual" ? "#10b981" : "#e5e7eb", color: mode === "individual" ? "#fff" : "#000", padding: "6px 12px", fontSize: "12px", flex: 1 }}>Individual</button>
+            <button onClick={() => setMode("box")} style={{ ...styles.button, background: mode === "box" ? "#10b981" : "#e5e7eb", color: mode === "box" ? "#fff" : "#000", padding: "6px 12px", fontSize: "12px", flex: 1 }}>Box</button>
+          </div>
           <input ref={qtyRef} type="number" min="1" value={qty} onChange={e => setQty(Number(e.target.value))} placeholder="Qty" style={{ ...styles.smallInput, maxWidth: 80 }} />
           <input ref={priceRef} type="text" inputMode="decimal" value={price} onChange={e => setPrice(Number(e.target.value) || 0)} placeholder="Price" style={{ ...styles.smallInput, maxWidth: 100 }} />
           <button style={styles.button} onClick={() => addItem(false)}>Add</button>
