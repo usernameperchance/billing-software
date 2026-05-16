@@ -88,21 +88,45 @@ export default function App() {
     return { ...i, total, profit };
   };
 
+  const formatPrice = (price: number): string => {
+    const num = Number(price) || 0;
+    if (Number.isInteger(num)) {
+      return num.toString();
+    }
+    return num.toFixed(2).replace(/\.?0+$/, '');
+  };
+
   editShadeSuggestion;
 
   const applyTriosoftPricing = (itemsList: BillItem[]): BillItem[] => {
-    const totalTriosoftQty = itemsList.reduce((sum, i) =>
-      i.item.toLowerCase() === "triosoft" ? sum + i.qty : sum, 0
-    );
-    const applyBulk = totalTriosoftQty > 0 && totalTriosoftQty % 6 === 0;
-    return itemsList.map(i => {
-      if (i.item.toLowerCase() === "triosoft" && !i.priceOverridden) {
-        const newPrice = applyBulk ? 110 : (i.originalPrice || i.price);
-        const updated = { ...i, price: newPrice, originalPrice: i.originalPrice || i.price };
-        return recalcItem(updated);
-      }
-      return recalcItem(i);
-    });
+    // Get all non-overridden triosoft items
+    const triosoftItems = itemsList
+      .map((i, idx) => ({ item: i, idx }))
+      .filter(x => x.item.item.toLowerCase() === "triosoft" && !x.item.priceOverridden);
+    
+    if (triosoftItems.length === 0) {
+      return itemsList.map(i => recalcItem(i));
+    }
+
+    // Calculate total qty and how many should get ₹110 (complete groups of 6)
+    const totalTriosoftQty = triosoftItems.reduce((sum, x) => sum + x.item.qty, 0);
+    const qty110 = Math.floor(totalTriosoftQty / 6) * 6;
+
+    // Assign prices: items are assigned ₹110 until we run out of qty110 slots
+    let slots110Remaining = qty110;
+    const updated = [...itemsList];
+    
+    for (const { item: trioItem, idx } of triosoftItems) {
+      const price = slots110Remaining >= trioItem.qty ? 110 : 120;
+      updated[idx] = {
+        ...trioItem,
+        price: price,
+        originalPrice: trioItem.originalPrice || trioItem.price
+      };
+      slots110Remaining -= trioItem.qty;
+    }
+
+    return updated.map(i => recalcItem(i));
   };
 
   const updateItems = (newItems: BillItem[]) => {
@@ -123,7 +147,7 @@ export default function App() {
             const priceData = await priceRes.json();
             const currentPrice = priceData.price || it.price;
             if (currentPrice !== it.price) {
-              changes.push(`${it.item}: ₹${it.price} → ₹${currentPrice}`);
+              changes.push(`${it.item}: ₹${formatPrice(it.price)} → ₹${formatPrice(currentPrice)}`);
               return { ...it, price: currentPrice, total: it.qty * currentPrice, priceOverridden: false };
             }
           } catch (err) { console.error(err); }
@@ -1107,7 +1131,7 @@ button:active:not(:disabled) { transform: translateY(0); }
                     />
                   ) : (
                     <>
-                      ₹{i.price}
+                      ₹{formatPrice(i.price)}
                       <button
                         className="no-print"
                         onClick={(e) => {
@@ -1130,7 +1154,7 @@ button:active:not(:disabled) { transform: translateY(0); }
                     </>
                   )}
                 </td>
-                <td style={{ ...styles.td, textAlign: "right", fontWeight: 700, paddingRight: "20px" }}>₹{i.total}</td>
+                <td style={{ ...styles.td, textAlign: "right", fontWeight: 700, paddingRight: "20px" }}>₹{formatPrice(i.total)}</td>
                 <td className="no-print" style={{ ...styles.td, textAlign: "center" }}>
                   <button style={styles.removeBtn} onClick={(e)=>{ e.stopPropagation(); confirmDeleteItem(idx); }}>✕</button>
                 </td>
@@ -1139,8 +1163,8 @@ button:active:not(:disabled) { transform: translateY(0); }
         </table>
         <hr style={styles.divider} />
         <div style={styles.totalsBlock}>
-          {courierCharges > 0 && <div style={{ ...styles.discountRow, display:"flex", justifyContent:"space-between", paddingRight:"8px", color:"#dc2626" }}><span>Courier Charges</span><span>+ ₹{courierCharges}</span></div>}
-          <div style={{ ...styles.grandTotalRow, display:"flex", justifyContent:"space-between" }}><span>Grand Total</span><span>₹{finalTotal}</span></div>
+          {courierCharges > 0 && <div style={{ ...styles.discountRow, display:"flex", justifyContent:"space-between", paddingRight:"8px", color:"#dc2626" }}><span>Courier Charges</span><span>+ ₹{formatPrice(courierCharges)}</span></div>}
+          <div style={{ ...styles.grandTotalRow, display:"flex", justifyContent:"space-between" }}><span>Grand Total</span><span>₹{formatPrice(finalTotal)}</span></div>
         </div>
         <p style={styles.thankYou}>Thank you for your purchase!</p>
       </div>
@@ -1166,7 +1190,7 @@ button:active:not(:disabled) { transform: translateY(0); }
         />
         {changeAmount > 0 && (
           <span style={{ fontSize: "13px", fontWeight: 700, color: "#10b981" }}>
-            Change: ₹{changeAmount}
+            Change: ₹{formatPrice(changeAmount)}
           </span>
         )}
       </div>
@@ -1192,7 +1216,7 @@ button:active:not(:disabled) { transform: translateY(0); }
         </div>
         {customer && <div style={styles.customerInfo}>
           <span>👤 {customer.customerId} — {customer.name} — {customer.points} pts</span>
-          {pointsConfig && customer.points >= pointsConfig.minRedeem && <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}><input type="checkbox" checked={redeemPoints} onChange={e=>setRedeemPoints(e.target.checked)} /> Redeem {customer.points} points (₹{Math.floor(customer.points*pointsConfig.redeemRate)} off)</label>}
+          {pointsConfig && customer.points >= pointsConfig.minRedeem && <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}><input type="checkbox" checked={redeemPoints} onChange={e=>setRedeemPoints(e.target.checked)} /> Redeem {customer.points} points (₹{formatPrice(Math.floor(customer.points*pointsConfig.redeemRate))} off)</label>}
           {pointsConfig && customer.points < pointsConfig.minRedeem && <span style={{ fontSize:12, color:"#aaa" }}>{pointsConfig.minRedeem - customer.points} more points needed</span>}
         </div>}
         {customerType === "courier" && <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:"8px" }}><span style={{ fontSize:"13px", fontWeight:600, minWidth:"120px" }}>Courier Charges:</span><input type="text" inputMode="decimal" value={courierCharges} onChange={e=>setCourierCharges(Number(e.target.value)||0)} placeholder="0" style={{ width:"100px", padding:"8px10px", fontSize:"13px", border:"1px solid #cbd5e1", borderRadius:"0px", outline:"none", boxSizing:"border-box" }} /></div>}
@@ -1223,9 +1247,9 @@ button:active:not(:disabled) { transform: translateY(0); }
           <div><strong>Phone:</strong> {retrievedBill.customerPhone}</div>
           <div><strong>Date & Time:</strong> {retrievedBill.date} {retrievedBill.time}</div>
           <div style={{ fontWeight:700, marginTop:"8px", borderTop:"1px solid #e5e7eb", paddingTop:"8px" }}>Items:</div>
-          {retrievedBill.items.map((it:any, idx:number)=> <div key={idx} style={{ display:"flex", justifyContent:"space-between", paddingBottom:"4px", borderBottom:"1px solid #e5e7eb" }}><span>{it.item} ({it.shade}) × {it.qty}</span><span>₹{it.total}</span></div>)}
-          <div style={{ marginTop:"8px", fontWeight:700, display:"flex", justifyContent:"space-between" }}><span>Final Total:</span><span>₹{retrievedBill.finalTotal}</span></div>
-          {retrievedBill.courierCharges > 0 && <div style={{ display:"flex", justifyContent:"space-between", color:"#dc2626", fontSize:"12px" }}><span>Courier:</span><span>₹{retrievedBill.courierCharges}</span></div>}
+          {retrievedBill.items.map((it:any, idx:number)=> <div key={idx} style={{ display:"flex", justifyContent:"space-between", paddingBottom:"4px", borderBottom:"1px solid #e5e7eb" }}><span>{it.item} ({it.shade}) × {it.qty}</span><span>₹{formatPrice(it.total)}</span></div>)}
+          <div style={{ marginTop:"8px", fontWeight:700, display:"flex", justifyContent:"space-between" }}><span>Final Total:</span><span>₹{formatPrice(retrievedBill.finalTotal)}</span></div>
+          {retrievedBill.courierCharges > 0 && <div style={{ display:"flex", justifyContent:"space-between", color:"#dc2626", fontSize:"12px" }}><span>Courier:</span><span>₹{formatPrice(retrievedBill.courierCharges)}</span></div>}
           <button onClick={()=>loadBillForEdit(retrievedBill)} style={{ marginTop:"12px", padding:"8px12px", width:"100%", fontSize:"13px", fontWeight:600, backgroundColor:"#10b981", color:"#fff", border:"none", borderRadius:"4px", cursor:"pointer" }}>📋 Load for Reprint</button>
         </div>}
       </div>}
